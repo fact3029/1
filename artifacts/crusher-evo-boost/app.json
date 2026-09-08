@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Crusher EVO Boost",
+    "slug": "crusher-evo-boost",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon-generated.png",
+    "scheme": "crusher-evo-boost",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "Crusher EVOのBluetoothサービスを解析し、本体EQ連携に必要な情報を確認します。",
+        "NSBluetoothPeripheralUsageDescription": "Crusher EVOのBluetoothサービスを解析し、本体EQ連携に必要な情報を確認します。"
+      }
+    },
+    "android": {},
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "react-native-audio-api",
+        {
+          "iosBackgroundMode": true
+        }
+      ],
+      "./plugins/withAudioUnitExtension"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

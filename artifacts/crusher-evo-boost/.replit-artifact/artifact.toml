@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/crusher-evo-boost/"
+title = "Crusher EVO Boost"
+description = "Skullcandy Crusher EVO S6EVW向けの低音ブーストとEQプリセットを保存・管理できるiPhoneコンパニオンアプリ。"
+version = "1.0.0"
+id = "artifacts/crusher-evo-boost"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/crusher-evo-boost/" ]
+localPort = 18201
+
+[services.development]
+run = "pnpm --filter @workspace/crusher-evo-boost run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/crusher-evo-boost", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/crusher-evo-boost", "run", "serve" ]
+
+[services.env]
+PORT = "18201"
+BASE_PATH = "/crusher-evo-boost/"
