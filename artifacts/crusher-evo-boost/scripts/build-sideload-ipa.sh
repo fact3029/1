@@ -52,20 +52,20 @@ EXPO_JSI_HEADER="$(
 [[ -f "${EXPO_JSI_HEADER}" ]] ||
   fail "expo-modules-jsi RuntimeScheduler.h was not found."
 
-EXPO_JSI_PACKAGE="$(
+EXPO_JSI_RUNTIME="$(
   find "${APP_ROOT}/../../node_modules/.pnpm" \
-    -path '*/expo-modules-jsi/apple/Package.swift' \
+    -path '*/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift' \
     -print \
     -quit
 )"
-[[ -f "${EXPO_JSI_PACKAGE}" ]] ||
-  fail "expo-modules-jsi Package.swift was not found."
+[[ -f "${EXPO_JSI_RUNTIME}" ]] ||
+  fail "expo-modules-jsi JavaScriptRuntime.swift was not found."
 
-node - "${EXPO_JSI_HEADER}" "${EXPO_JSI_PACKAGE}" <<'NODE'
+node - "${EXPO_JSI_HEADER}" "${EXPO_JSI_RUNTIME}" <<'NODE'
 const fs = require('node:fs');
 
 const headerPath = process.argv[2];
-const packagePath = process.argv[3];
+const runtimePath = process.argv[3];
 const headerSource = fs.readFileSync(headerPath, 'utf8');
 const constructors = [
   'SWIFT_RETURNS_RETAINED RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept',
@@ -88,22 +88,80 @@ for (const constructor of constructors) {
 
 fs.writeFileSync(headerPath, patchedHeader);
 
-const packageSource = fs.readFileSync(packagePath, 'utf8');
-const swift6Mode = 'swiftLanguageModes: [.v6]';
-const modeOccurrences = packageSource.split(swift6Mode).length - 1;
-if (modeOccurrences !== 1) {
+const runtimeSource = fs.readFileSync(runtimePath, 'utf8');
+const functionMarker = `private func createFunctionClosure(
+  runtime: JavaScriptRuntime, name: String? = nil, _ closure: @escaping JavaScriptRuntime.SyncFunctionClosure`;
+const markerOccurrences = runtimeSource.split(functionMarker).length - 1;
+if (markerOccurrences !== 1) {
   throw new Error(
-    `Expected one Swift 6 language mode declaration in ${packagePath}, found ${modeOccurrences}.`
+    `Expected one host function marker in ${runtimePath}, found ${markerOccurrences}.`
   );
 }
 
-fs.writeFileSync(packagePath, packageSource.replace(swift6Mode, 'swiftLanguageModes: [.v5]'));
+const sendableWrapper = `private struct SendableHostFunctionPointers: @unchecked Sendable {
+  let thisPtr: UnsafePointer<facebook.jsi.Value>
+  let argumentsPtr: UnsafePointer<facebook.jsi.Value>
+  let resultPtr: UnsafeMutablePointer<facebook.jsi.Value>
+}
+
+`;
+let patchedRuntime = runtimeSource.replace(functionMarker, sendableWrapper + functionMarker);
+
+const pointerCaptures = `    nonisolated(unsafe) let thisPtr = thisPtr
+    nonisolated(unsafe) let argumentsPtr = argumentsPtr
+    nonisolated(unsafe) let resultPtr = resultPtr`;
+const pointerWrapper = `    let pointers = SendableHostFunctionPointers(
+      thisPtr: thisPtr,
+      argumentsPtr: argumentsPtr,
+      resultPtr: resultPtr
+    )`;
+const captureOccurrences = patchedRuntime.split(pointerCaptures).length - 1;
+if (captureOccurrences !== 2) {
+  throw new Error(
+    `Expected two unsafe pointer capture blocks in ${runtimePath}, found ${captureOccurrences}.`
+  );
+}
+patchedRuntime = patchedRuntime.replaceAll(pointerCaptures, pointerWrapper);
+
+const pointerUses = [
+  [
+    `withGuaranteedContext(context) { (context: HostFunctionContext, runtime) in
+      resultPtr.pointee = JavaScriptActor.assumeIsolated`,
+    `withGuaranteedContext(context) { (context: HostFunctionContext, runtime) in
+      pointers.resultPtr.pointee = JavaScriptActor.assumeIsolated`,
+    1,
+  ],
+  [
+    `withGuaranteedContext(context) { (context: UnownedThisHostFunctionContext, runtime) in
+      resultPtr.pointee = JavaScriptActor.assumeIsolated`,
+    `withGuaranteedContext(context) { (context: UnownedThisHostFunctionContext, runtime) in
+      pointers.resultPtr.pointee = JavaScriptActor.assumeIsolated`,
+    1,
+  ],
+  ['UnsafeMutablePointer(mutating: thisPtr).move()', 'UnsafeMutablePointer(mutating: pointers.thisPtr).move()', 1],
+  ['start: argumentsPtr, count: argumentsCount', 'start: pointers.argumentsPtr, count: argumentsCount', 2],
+  ['JavaScriptUnownedValue(runtime.pointee, thisPtr)', 'JavaScriptUnownedValue(runtime.pointee, pointers.thisPtr)', 1],
+];
+
+for (const [original, replacement, expected] of pointerUses) {
+  const occurrences = patchedRuntime.split(original).length - 1;
+  if (occurrences !== expected) {
+    throw new Error(
+      `Expected ${expected} occurrences of "${original}" in ${runtimePath}, found ${occurrences}.`
+    );
+  }
+  patchedRuntime = patchedRuntime.replaceAll(original, replacement);
+}
+
+fs.writeFileSync(runtimePath, patchedRuntime);
 NODE
 
 grep -q "SWIFT_RETURNS_RETAINED RuntimeScheduler" "${EXPO_JSI_HEADER}" &&
   fail "The incompatible RuntimeScheduler constructor attribute is still present."
-grep -Fq "swiftLanguageModes: [.v5]" "${EXPO_JSI_PACKAGE}" ||
-  fail "expo-modules-jsi was not switched to Swift 5 language mode."
+grep -Fq "private struct SendableHostFunctionPointers: @unchecked Sendable" "${EXPO_JSI_RUNTIME}" ||
+  fail "The safe Swift pointer wrapper was not added."
+grep -q "nonisolated(unsafe) let argumentsPtr = argumentsPtr" "${EXPO_JSI_RUNTIME}" &&
+  fail "The incompatible Swift pointer capture is still present."
 
 echo "==> Installing iOS native dependencies"
 (
