@@ -23,21 +23,21 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Select Xcode with Swift 6.2
+      - name: Select Xcode 26.2 with Swift 6.2
         shell: bash
         run: |
           set -Eeuo pipefail
-          XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' -print | sort -V | tail -n 1)"
-          if [[ -z "${XCODE_APP}" ]]; then
-            echo "::error::Xcode 26 is not installed on this runner."
+          XCODE_APP="/Applications/Xcode_26.2.app"
+          if [[ ! -d "${XCODE_APP}" ]]; then
+            echo "::error::Xcode 26.2 is not installed on this runner."
             ls -1 /Applications | grep '^Xcode' || true
             exit 1
           fi
           sudo xcode-select --switch "${XCODE_APP}/Contents/Developer"
           xcodebuild -version
           SWIFT_VERSION="$(swift --version | sed -nE 's/.*Swift version ([0-9]+\.[0-9]+).*/\1/p' | head -n 1)"
-          if [[ "${SWIFT_VERSION}" != "6.2" && "${SWIFT_VERSION}" != 6.[3-9] && "${SWIFT_VERSION}" != [7-9].* ]]; then
-            echo "::error::Swift 6.2 or newer is required, but ${SWIFT_VERSION:-unknown} is selected."
+          if [[ "${SWIFT_VERSION}" != "6.2" ]]; then
+            echo "::error::Xcode 26.2 must provide Swift 6.2, but ${SWIFT_VERSION:-unknown} is selected."
             exit 1
           fi
 
