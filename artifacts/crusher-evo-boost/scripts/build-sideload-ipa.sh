@@ -52,20 +52,20 @@ EXPO_JSI_HEADER="$(
 [[ -f "${EXPO_JSI_HEADER}" ]] ||
   fail "expo-modules-jsi RuntimeScheduler.h was not found."
 
-EXPO_JSI_RUNTIME="$(
+EXPO_JSI_PACKAGE="$(
   find "${APP_ROOT}/../../node_modules/.pnpm" \
-    -path '*/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift' \
+    -path '*/expo-modules-jsi/apple/Package.swift' \
     -print \
     -quit
 )"
-[[ -f "${EXPO_JSI_RUNTIME}" ]] ||
-  fail "expo-modules-jsi JavaScriptRuntime.swift was not found."
+[[ -f "${EXPO_JSI_PACKAGE}" ]] ||
+  fail "expo-modules-jsi Package.swift was not found."
 
-node - "${EXPO_JSI_HEADER}" "${EXPO_JSI_RUNTIME}" <<'NODE'
+node - "${EXPO_JSI_HEADER}" "${EXPO_JSI_PACKAGE}" <<'NODE'
 const fs = require('node:fs');
 
 const headerPath = process.argv[2];
-const runtimePath = process.argv[3];
+const packagePath = process.argv[3];
 const headerSource = fs.readFileSync(headerPath, 'utf8');
 const constructors = [
   'SWIFT_RETURNS_RETAINED RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept',
@@ -88,67 +88,22 @@ for (const constructor of constructors) {
 
 fs.writeFileSync(headerPath, patchedHeader);
 
-const runtimeSource = fs.readFileSync(runtimePath, 'utf8');
-const pointerCaptures = `    nonisolated(unsafe) let thisPtr = thisPtr
-    nonisolated(unsafe) let argumentsPtr = argumentsPtr
-    nonisolated(unsafe) let resultPtr = resultPtr`;
-const pointerAddresses = `    let thisAddress = UInt(bitPattern: thisPtr)
-    let argumentsAddress = UInt(bitPattern: argumentsPtr)
-    let resultAddress = UInt(bitPattern: resultPtr)`;
-const captureOccurrences = runtimeSource.split(pointerCaptures).length - 1;
-if (captureOccurrences !== 2) {
+const packageSource = fs.readFileSync(packagePath, 'utf8');
+const swift6Mode = 'swiftLanguageModes: [.v6]';
+const modeOccurrences = packageSource.split(swift6Mode).length - 1;
+if (modeOccurrences !== 1) {
   throw new Error(
-    `Expected two unsafe pointer capture blocks in ${runtimePath}, found ${captureOccurrences}.`
+    `Expected one Swift 6 language mode declaration in ${packagePath}, found ${modeOccurrences}.`
   );
 }
 
-let patchedRuntime = runtimeSource.replaceAll(pointerCaptures, pointerAddresses);
-const replacements = [
-  [
-    `      resultPtr.pointee = JavaScriptActor.assumeIsolated {
-        return forwardingSwiftErrorsToJS(runtime: runtime) {
-          let this = UnsafeMutablePointer(mutating: thisPtr).move()
-          let arguments = JavaScriptValuesBuffer(runtime, start: argumentsPtr, count: argumentsCount)`,
-    `      let resultPtr = UnsafeMutablePointer<facebook.jsi.Value>(bitPattern: resultAddress)!
-      resultPtr.pointee = JavaScriptActor.assumeIsolated {
-        return forwardingSwiftErrorsToJS(runtime: runtime) {
-          let thisPtr = UnsafePointer<facebook.jsi.Value>(bitPattern: thisAddress)!
-          let argumentsPtr = UnsafePointer<facebook.jsi.Value>(bitPattern: argumentsAddress)!
-          let this = UnsafeMutablePointer(mutating: thisPtr).move()
-          let arguments = JavaScriptValuesBuffer(runtime, start: argumentsPtr, count: argumentsCount)`,
-  ],
-  [
-    `      resultPtr.pointee = JavaScriptActor.assumeIsolated {
-        return forwardingSwiftErrorsToJS(runtime: runtime) {
-          let arguments = JavaScriptValuesBuffer(runtime, start: argumentsPtr, count: argumentsCount)
-          let thisValue = JavaScriptUnownedValue(runtime.pointee, thisPtr)`,
-    `      let resultPtr = UnsafeMutablePointer<facebook.jsi.Value>(bitPattern: resultAddress)!
-      resultPtr.pointee = JavaScriptActor.assumeIsolated {
-        return forwardingSwiftErrorsToJS(runtime: runtime) {
-          let argumentsPtr = UnsafePointer<facebook.jsi.Value>(bitPattern: argumentsAddress)!
-          let thisPtr = UnsafePointer<facebook.jsi.Value>(bitPattern: thisAddress)!
-          let arguments = JavaScriptValuesBuffer(runtime, start: argumentsPtr, count: argumentsCount)
-          let thisValue = JavaScriptUnownedValue(runtime.pointee, thisPtr)`,
-  ],
-];
-
-for (const [original, replacement] of replacements) {
-  const occurrences = patchedRuntime.split(original).length - 1;
-  if (occurrences !== 1) {
-    throw new Error(
-      `Expected one pointer use block in ${runtimePath}, found ${occurrences}.`
-    );
-  }
-  patchedRuntime = patchedRuntime.replace(original, replacement);
-}
-
-fs.writeFileSync(runtimePath, patchedRuntime);
+fs.writeFileSync(packagePath, packageSource.replace(swift6Mode, 'swiftLanguageModes: [.v5]'));
 NODE
 
 grep -q "SWIFT_RETURNS_RETAINED RuntimeScheduler" "${EXPO_JSI_HEADER}" &&
   fail "The incompatible RuntimeScheduler constructor attribute is still present."
-grep -q "nonisolated(unsafe) let argumentsPtr = argumentsPtr" "${EXPO_JSI_RUNTIME}" &&
-  fail "The incompatible Swift pointer capture is still present."
+grep -Fq "swiftLanguageModes: [.v5]" "${EXPO_JSI_PACKAGE}" ||
+  fail "expo-modules-jsi was not switched to Swift 5 language mode."
 
 echo "==> Installing iOS native dependencies"
 (
