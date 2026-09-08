@@ -11,16 +11,16 @@ export type OutputMode = {
   available: boolean;
 };
 
-export const DEFAULT_OUTPUT_MODE: OutputModeId = 'auto';
+export const DEFAULT_OUTPUT_MODE: OutputModeId = 'app-test';
 export const IS_SIDELOAD_BUILD = Constants.expoConfig?.extra?.distribution === 'sideloadly';
 
 export const OUTPUT_MODES: OutputMode[] = [
   {
     id: 'auto',
     title: '接続中のヘッドフォン',
-    description: '出力先を検出して、対応方式を選択',
-    status: '推奨',
-    detail: 'Crusher EVO本体制御の公式APIが利用できれば、本体DSPへ設定を送ります。',
+    description: '現在の出力先を確認',
+    status: '確認',
+    detail: 'Bluetooth接続はiPhoneの設定で行います。EQを確認するには「アプリ内テスト」を使います。',
     available: true,
   },
   {
@@ -44,7 +44,7 @@ export const OUTPUT_MODES: OutputMode[] = [
   {
     id: 'generic-bluetooth',
     title: '一般Bluetooth',
-    description: '標準Bluetooth出力を検出',
+    description: '標準Bluetooth出力を表示',
     status: '制御対象外',
     detail: '標準Bluetooth音声プロファイルには、第三者アプリがEQを送る共通仕様はありません。',
     available: true,
