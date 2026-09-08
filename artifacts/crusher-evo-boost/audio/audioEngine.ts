@@ -101,3 +101,58 @@ export async function startBassTest(
 
   return { stop };
 }
+
+export async function startAudioFile(
+  uri: string,
+  settings: BassTestSettings,
+): Promise<BassTestSession> {
+  await activateAudioSession();
+  const context = new AudioContext();
+  const sourceUri = uri.startsWith('file://') ? uri.slice('file://'.length) : uri;
+  const source = context.context.createFileSource({
+    source: sourceUri,
+    loop: false,
+    volume: 1,
+    playbackRate: 1,
+    preservesPitch: true,
+  });
+
+  if (!source) {
+    await context.close();
+    throw new Error('この音声形式を再生できません。MP3、M4A、WAVのいずれかを選択してください。');
+  }
+
+  const lowShelf = context.context.createBiquadFilter({});
+  const bandFilters = [60, 150, 400, 1000, 4000].map(() => context.context.createBiquadFilter({}));
+  const master = context.context.createGain({ gain: 0.78 });
+  lowShelf.type = 'lowshelf';
+  lowShelf.frequency.value = 120;
+  lowShelf.gain.value = Math.min(14, 2 + settings.bassBoost * 0.09 + settings.subBass * 0.4);
+  bandFilters.forEach((filter, index) => {
+    filter.type = 'peaking';
+    filter.frequency.value = [60, 150, 400, 1000, 4000][index];
+    filter.Q.value = 0.85;
+    filter.gain.value = Math.max(-6, Math.min(6, settings.bands[index] ?? 0));
+  });
+
+  source.connect(lowShelf);
+  let previous = lowShelf;
+  bandFilters.forEach((filter) => {
+    previous.connect(filter);
+    previous = filter;
+  });
+  previous.connect(master);
+  master.connect(context.context.destination);
+  source.start(context.currentTime);
+
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    source.stop(context.currentTime + 0.05);
+    source.disconnect();
+    void context.close();
+  };
+
+  return { stop };
+}
