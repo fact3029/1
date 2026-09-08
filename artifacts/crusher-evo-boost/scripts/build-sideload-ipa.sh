@@ -11,6 +11,16 @@ fail() {
   exit 1
 }
 
+report_error() {
+  local exit_code=$?
+  local line_number=$1
+  local command=$2
+  printf '::error title=IPA build script failed::Line %s exited with %s: %s\n' \
+    "${line_number}" "${exit_code}" "${command}"
+}
+
+trap 'report_error "${LINENO}" "${BASH_COMMAND}"' ERR
+
 [[ "$(uname -s)" == "Darwin" ]] || fail "iOS compilation requires macOS with Xcode."
 command -v xcodebuild >/dev/null || fail "xcodebuild was not found. Install Xcode and select it with xcode-select."
 command -v pod >/dev/null || fail "CocoaPods was not found. Install CocoaPods before building."
@@ -83,6 +93,9 @@ WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
 SCHEME="${SIDELOAD_SCHEME:-$(basename "${WORKSPACE}" .xcworkspace)}"
 
 echo "==> Building unsigned Release app for a physical iPhone"
+XCODEBUILD_LOG="${OUTPUT_ROOT}/xcodebuild.log"
+trap - ERR
+set +e
 xcodebuild \
   -workspace "${WORKSPACE}" \
   -scheme "${SCHEME}" \
@@ -94,7 +107,25 @@ xcodebuild \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
   DEVELOPMENT_TEAM="" \
-  build
+  build 2>&1 | tee "${XCODEBUILD_LOG}"
+XCODEBUILD_STATUS=${PIPESTATUS[0]}
+set -e
+trap 'report_error "${LINENO}" "${BASH_COMMAND}"' ERR
+
+if [[ ${XCODEBUILD_STATUS} -ne 0 ]]; then
+  while IFS= read -r error_line; do
+    error_line="${error_line//'%'/'%25'}"
+    error_line="${error_line//$'\r'/'%0D'}"
+    error_line="${error_line//$'\n'/'%0A'}"
+    printf '::error title=Xcode build error::%s\n' "${error_line}"
+  done < <(
+    grep -Ei \
+      '(^|[[:space:]])(error:|fatal error:|undefined symbols|duplicate symbol|ld:)|The following build commands failed' \
+      "${XCODEBUILD_LOG}" |
+      tail -n 30
+  )
+  exit "${XCODEBUILD_STATUS}"
+fi
 
 APP_PATH="$(find "${DERIVED_DATA}/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' -type d -print -quit)"
 [[ -n "${APP_PATH}" ]] || fail "The Release .app bundle was not produced."
