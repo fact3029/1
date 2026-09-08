@@ -152,7 +152,11 @@ export default function HomeScreen() {
         />
       </View>
 
-      <BassTestCard bassBoost={activeProfile.bassBoost} subBass={activeProfile.subBass} />
+      <BassTestCard
+        bassBoost={activeProfile.bassBoost}
+        subBass={activeProfile.subBass}
+        bands={activeProfile.bands}
+      />
 
       <View style={styles.sectionHeading}>
         <View>
