@@ -37,7 +37,7 @@ export function BassTestCard({ bassBoost, subBass }: BassTestCardProps) {
     }
 
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    sessionRef.current = startBassTest({ bassBoost, subBass });
+    sessionRef.current = await startBassTest({ bassBoost, subBass });
     setPlaying(true);
     timerRef.current = setTimeout(stop, 8200);
   };
