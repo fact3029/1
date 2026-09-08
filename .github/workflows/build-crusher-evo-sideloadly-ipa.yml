@@ -10,18 +10,36 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10.26.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
+
+      - name: Select Xcode with Swift 6.2
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' -print | sort -V | tail -n 1)"
+          if [[ -z "${XCODE_APP}" ]]; then
+            echo "::error::Xcode 26 is not installed on this runner."
+            ls -1 /Applications | grep '^Xcode' || true
+            exit 1
+          fi
+          sudo xcode-select --switch "${XCODE_APP}/Contents/Developer"
+          xcodebuild -version
+          SWIFT_VERSION="$(swift --version | sed -nE 's/.*Swift version ([0-9]+\.[0-9]+).*/\1/p' | head -n 1)"
+          if [[ "${SWIFT_VERSION}" != "6.2" && "${SWIFT_VERSION}" != 6.[3-9] && "${SWIFT_VERSION}" != [7-9].* ]]; then
+            echo "::error::Swift 6.2 or newer is required, but ${SWIFT_VERSION:-unknown} is selected."
+            exit 1
+          fi
 
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
@@ -30,7 +48,7 @@ jobs:
         run: pnpm --filter @workspace/crusher-evo-boost run ipa:sideload
 
       - name: Upload IPA
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Crusher-EVO-Boost-Sideloadly
           path: artifacts/crusher-evo-boost/build/sideload/Crusher-EVO-Boost-Sideloadly.ipa
