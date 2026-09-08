@@ -1,4 +1,5 @@
 import { AudioContext } from 'react-native-audio-api';
+import { activateAudioSession } from '@/audio/outputRoute';
 
 export type BassTestSettings = {
   bassBoost: number;
@@ -9,7 +10,8 @@ export type BassTestSession = {
   stop: () => void;
 };
 
-export function startBassTest(settings: BassTestSettings): BassTestSession {
+export async function startBassTest(settings: BassTestSettings): Promise<BassTestSession> {
+  await activateAudioSession();
   const context = new AudioContext();
   const lowShelf = context.createBiquadFilter();
   const master = context.createGain();
