@@ -32,6 +32,43 @@ if grep -Rqs "CrusherEVOAudioUnit" ios; then
   fail "Audio Unit extension was unexpectedly included in the sideload build."
 fi
 
+echo "==> Applying the Expo Modules JSI Xcode 26 compatibility patch"
+EXPO_JSI_HEADER="$(
+  find "${APP_ROOT}/../../node_modules/.pnpm" \
+    -path '*/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h' \
+    -print \
+    -quit
+)"
+[[ -f "${EXPO_JSI_HEADER}" ]] ||
+  fail "expo-modules-jsi RuntimeScheduler.h was not found."
+
+node - "${EXPO_JSI_HEADER}" <<'NODE'
+const fs = require('node:fs');
+
+const headerPath = process.argv[2];
+const source = fs.readFileSync(headerPath, 'utf8');
+const constructors = [
+  'SWIFT_RETURNS_RETAINED RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept',
+  'SWIFT_RETURNS_RETAINED RuntimeScheduler() {}',
+];
+
+let patched = source;
+for (const constructor of constructors) {
+  const occurrences = patched.split(constructor).length - 1;
+  if (occurrences !== 1) {
+    throw new Error(
+      `Expected one occurrence of "${constructor}" in ${headerPath}, found ${occurrences}.`
+    );
+  }
+  patched = patched.replace(constructor, constructor.replace('SWIFT_RETURNS_RETAINED ', ''));
+}
+
+fs.writeFileSync(headerPath, patched);
+NODE
+
+grep -q "SWIFT_RETURNS_RETAINED RuntimeScheduler" "${EXPO_JSI_HEADER}" &&
+  fail "The incompatible RuntimeScheduler constructor attribute is still present."
+
 echo "==> Installing iOS native dependencies"
 (
   cd ios
