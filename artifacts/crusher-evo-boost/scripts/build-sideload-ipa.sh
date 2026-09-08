@@ -52,32 +52,103 @@ EXPO_JSI_HEADER="$(
 [[ -f "${EXPO_JSI_HEADER}" ]] ||
   fail "expo-modules-jsi RuntimeScheduler.h was not found."
 
-node - "${EXPO_JSI_HEADER}" <<'NODE'
+EXPO_JSI_RUNTIME="$(
+  find "${APP_ROOT}/../../node_modules/.pnpm" \
+    -path '*/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift' \
+    -print \
+    -quit
+)"
+[[ -f "${EXPO_JSI_RUNTIME}" ]] ||
+  fail "expo-modules-jsi JavaScriptRuntime.swift was not found."
+
+node - "${EXPO_JSI_HEADER}" "${EXPO_JSI_RUNTIME}" <<'NODE'
 const fs = require('node:fs');
 
 const headerPath = process.argv[2];
-const source = fs.readFileSync(headerPath, 'utf8');
+const runtimePath = process.argv[3];
+const headerSource = fs.readFileSync(headerPath, 'utf8');
 const constructors = [
   'SWIFT_RETURNS_RETAINED RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept',
   'SWIFT_RETURNS_RETAINED RuntimeScheduler() {}',
 ];
 
-let patched = source;
+let patchedHeader = headerSource;
 for (const constructor of constructors) {
-  const occurrences = patched.split(constructor).length - 1;
+  const occurrences = patchedHeader.split(constructor).length - 1;
   if (occurrences !== 1) {
     throw new Error(
       `Expected one occurrence of "${constructor}" in ${headerPath}, found ${occurrences}.`
     );
   }
-  patched = patched.replace(constructor, constructor.replace('SWIFT_RETURNS_RETAINED ', ''));
+  patchedHeader = patchedHeader.replace(
+    constructor,
+    constructor.replace('SWIFT_RETURNS_RETAINED ', '')
+  );
 }
 
-fs.writeFileSync(headerPath, patched);
+fs.writeFileSync(headerPath, patchedHeader);
+
+const runtimeSource = fs.readFileSync(runtimePath, 'utf8');
+const pointerCaptures = `    nonisolated(unsafe) let thisPtr = thisPtr
+    nonisolated(unsafe) let argumentsPtr = argumentsPtr
+    nonisolated(unsafe) let resultPtr = resultPtr`;
+const pointerAddresses = `    let thisAddress = UInt(bitPattern: thisPtr)
+    let argumentsAddress = UInt(bitPattern: argumentsPtr)
+    let resultAddress = UInt(bitPattern: resultPtr)`;
+const captureOccurrences = runtimeSource.split(pointerCaptures).length - 1;
+if (captureOccurrences !== 2) {
+  throw new Error(
+    `Expected two unsafe pointer capture blocks in ${runtimePath}, found ${captureOccurrences}.`
+  );
+}
+
+let patchedRuntime = runtimeSource.replaceAll(pointerCaptures, pointerAddresses);
+const replacements = [
+  [
+    `      resultPtr.pointee = JavaScriptActor.assumeIsolated {
+        return forwardingSwiftErrorsToJS(runtime: runtime) {
+          let this = UnsafeMutablePointer(mutating: thisPtr).move()
+          let arguments = JavaScriptValuesBuffer(runtime, start: argumentsPtr, count: argumentsCount)`,
+    `      let resultPtr = UnsafeMutablePointer<facebook.jsi.Value>(bitPattern: resultAddress)!
+      resultPtr.pointee = JavaScriptActor.assumeIsolated {
+        return forwardingSwiftErrorsToJS(runtime: runtime) {
+          let thisPtr = UnsafePointer<facebook.jsi.Value>(bitPattern: thisAddress)!
+          let argumentsPtr = UnsafePointer<facebook.jsi.Value>(bitPattern: argumentsAddress)!
+          let this = UnsafeMutablePointer(mutating: thisPtr).move()
+          let arguments = JavaScriptValuesBuffer(runtime, start: argumentsPtr, count: argumentsCount)`,
+  ],
+  [
+    `      resultPtr.pointee = JavaScriptActor.assumeIsolated {
+        return forwardingSwiftErrorsToJS(runtime: runtime) {
+          let arguments = JavaScriptValuesBuffer(runtime, start: argumentsPtr, count: argumentsCount)
+          let thisValue = JavaScriptUnownedValue(runtime.pointee, thisPtr)`,
+    `      let resultPtr = UnsafeMutablePointer<facebook.jsi.Value>(bitPattern: resultAddress)!
+      resultPtr.pointee = JavaScriptActor.assumeIsolated {
+        return forwardingSwiftErrorsToJS(runtime: runtime) {
+          let argumentsPtr = UnsafePointer<facebook.jsi.Value>(bitPattern: argumentsAddress)!
+          let thisPtr = UnsafePointer<facebook.jsi.Value>(bitPattern: thisAddress)!
+          let arguments = JavaScriptValuesBuffer(runtime, start: argumentsPtr, count: argumentsCount)
+          let thisValue = JavaScriptUnownedValue(runtime.pointee, thisPtr)`,
+  ],
+];
+
+for (const [original, replacement] of replacements) {
+  const occurrences = patchedRuntime.split(original).length - 1;
+  if (occurrences !== 1) {
+    throw new Error(
+      `Expected one pointer use block in ${runtimePath}, found ${occurrences}.`
+    );
+  }
+  patchedRuntime = patchedRuntime.replace(original, replacement);
+}
+
+fs.writeFileSync(runtimePath, patchedRuntime);
 NODE
 
 grep -q "SWIFT_RETURNS_RETAINED RuntimeScheduler" "${EXPO_JSI_HEADER}" &&
   fail "The incompatible RuntimeScheduler constructor attribute is still present."
+grep -q "nonisolated(unsafe) let argumentsPtr = argumentsPtr" "${EXPO_JSI_RUNTIME}" &&
+  fail "The incompatible Swift pointer capture is still present."
 
 echo "==> Installing iOS native dependencies"
 (
