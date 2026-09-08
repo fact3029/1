@@ -1,13 +1,13 @@
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
-import React, { useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BoostSlider } from '@/components/BoostSlider';
 import { BassTestCard } from '@/components/BassTestCard';
 import { OutputModeSelector } from '@/components/OutputModeSelector';
-import { getCurrentOutputRoute, type OutputRoute } from '@/audio/outputRoute';
+import { activateAudioSession, subscribeToOutputRoute, type OutputRoute } from '@/audio/outputRoute';
 import { useProfiles } from '@/context/ProfileContext';
 import { useColors } from '@/hooks/useColors';
 
@@ -19,12 +19,29 @@ export default function HomeScreen() {
   const router = useRouter();
   const { activeProfile, profiles, hydrated, outputMode, setOutputMode, setActiveId, updateActive, saveProfiles } = useProfiles();
   const [saved, setSaved] = useState(false);
-  const [outputRoute, setOutputRoute] = useState<OutputRoute>({ connected: false, name: '', type: 'unknown' });
+  const [outputRoute, setOutputRoute] = useState<OutputRoute>({
+    connected: false,
+    isBluetooth: false,
+    name: '',
+    type: 'unknown',
+  });
 
-  React.useEffect(() => {
+  const refreshOutputRoute = useCallback(() => {
+    void activateAudioSession().then(setOutputRoute);
+  }, []);
+
+  useEffect(() => {
     if (!hydrated) return;
-    void getCurrentOutputRoute().then(setOutputRoute);
-  }, [hydrated]);
+    refreshOutputRoute();
+    const routeSubscription = subscribeToOutputRoute(setOutputRoute);
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refreshOutputRoute();
+    });
+    return () => {
+      routeSubscription.remove();
+      appStateSubscription.remove();
+    };
+  }, [hydrated, refreshOutputRoute]);
 
   const save = async () => {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -67,17 +84,23 @@ export default function HomeScreen() {
         <View style={styles.connectionCopy}>
           <View style={styles.connectionTitleRow}>
             <Text style={[styles.cardTitle, { color: colors.foreground }]}>
-              {outputRoute.connected && outputRoute.name ? outputRoute.name : 'S6EVWを準備'}
+              {outputRoute.isBluetooth && outputRoute.name
+                ? outputRoute.name
+                : outputRoute.connected
+                  ? 'iPhoneスピーカー'
+                  : 'Bluetooth出力を確認中'}
             </Text>
-            <View style={[styles.statusDot, { backgroundColor: outputRoute.connected ? colors.primary : colors.mutedForeground }]} />
-            <Text style={[styles.statusText, { color: outputRoute.connected ? colors.primary : colors.mutedForeground }]}>
-              {outputRoute.connected ? '接続済み' : '未接続'}
+            <View style={[styles.statusDot, { backgroundColor: outputRoute.isBluetooth ? colors.primary : colors.mutedForeground }]} />
+            <Text style={[styles.statusText, { color: outputRoute.isBluetooth ? colors.primary : colors.mutedForeground }]}>
+              {outputRoute.isBluetooth ? 'Bluetooth接続済み' : outputRoute.connected ? 'スピーカー' : '未接続'}
             </Text>
           </View>
           <Text style={[styles.cardBody, { color: colors.mutedForeground }]}>
-            {outputRoute.connected
-              ? '現在の出力先として検出されています。EQのかけ方を選択してください。'
-              : 'iPhoneのBluetooth設定で接続してから、音楽を再生してください。'}
+            {outputRoute.isBluetooth
+              ? 'アプリ内テスト音は、このBluetooth出力へ送られます。'
+              : outputRoute.connected
+                ? 'iPhoneのBluetooth設定でCrusher EVOを接続すると、ここに表示されます。'
+                : 'iPhoneのBluetooth設定でCrusher EVOを接続してください.'}
           </Text>
         </View>
         <Pressable
