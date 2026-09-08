@@ -7,10 +7,29 @@ private let crusherAppGroup = "group.com.crusherevo.boost.audio"
 
 public final class CrusherAudioUnitModule: Module {
   private let bluetoothAnalyzer = BluetoothAnalyzer()
+  private let audioSession = AVAudioSession.sharedInstance()
+  private var routeObserver: NSObjectProtocol?
 
   public func definition() -> ModuleDefinition {
     Name("CrusherAudioUnit")
-    Events("analysisEvent")
+    Events("analysisEvent", "outputRouteChanged")
+
+    OnCreate {
+      routeObserver = NotificationCenter.default.addObserver(
+        forName: AVAudioSession.routeChangeNotification,
+        object: audioSession,
+        queue: .main
+      ) { [weak self] _ in
+        self?.sendCurrentOutputRoute()
+      }
+    }
+
+    OnDestroy {
+      if let routeObserver {
+        NotificationCenter.default.removeObserver(routeObserver)
+        self.routeObserver = nil
+      }
+    }
 
     AsyncFunction("syncProfile") { (bassBoost: Double, subBass: Double, bands: [Double]) in
       guard let defaults = UserDefaults(suiteName: crusherAppGroup) else {
@@ -24,14 +43,33 @@ public final class CrusherAudioUnitModule: Module {
       defaults.synchronize()
     }
 
-    AsyncFunction("getCurrentOutput") {
-      let output = AVAudioSession.sharedInstance().currentRoute.outputs.first
-      return [
-        "connected": output != nil,
-        "name": output?.portName ?? "",
-        "type": output?.portType.rawValue ?? "unknown",
+    AsyncFunction("activateAudioSession") { [weak self] in
+      guard let self else {
+        throw NSError(domain: "CrusherAudioUnit", code: 3, userInfo: [
+          NSLocalizedDescriptionKey: "音声モジュールが利用できません。",
+        ])
+      }
+      do {
+        try audioSession.setCategory(.playback, mode: .music, options: [.allowBluetooth, .allowBluetoothA2DP])
+        try audioSession.setActive(true)
+        return currentOutputRoute()
+      } catch {
+        throw NSError(domain: "CrusherAudioUnit", code: 2, userInfo: [
+          NSLocalizedDescriptionKey: "音声出力を有効化できませんでした: \(error.localizedDescription)",
+        ])
+      }
+    }
+    .runOnQueue(.main)
+
+    AsyncFunction("getCurrentOutput") { [weak self] in
+      self?.currentOutputRoute() ?? [
+        "connected": false,
+        "isBluetooth": false,
+        "name": "",
+        "type": "unavailable",
       ]
     }
+    .runOnQueue(.main)
 
     AsyncFunction("startBluetoothAnalysis") { [weak self] in
       guard let self else { return }
@@ -51,6 +89,22 @@ public final class CrusherAudioUnitModule: Module {
       self?.bluetoothAnalyzer.connect(identifier: identifier)
     }
     .runOnQueue(.main)
+  }
+
+  private func currentOutputRoute() -> [String: Any] {
+    let output = audioSession.currentRoute.outputs.first
+    let portType = output?.portType ?? .builtInSpeaker
+    let isBluetooth = portType == .bluetoothA2DP || portType == .bluetoothHFP || portType == .bluetoothLE
+    return [
+      "connected": output != nil,
+      "isBluetooth": isBluetooth,
+      "name": output?.portName ?? (isBluetooth ? "" : "iPhoneスピーカー"),
+      "type": portType.rawValue,
+    ]
+  }
+
+  private func sendCurrentOutputRoute() {
+    sendEvent("outputRouteChanged", currentOutputRoute())
   }
 }
 
