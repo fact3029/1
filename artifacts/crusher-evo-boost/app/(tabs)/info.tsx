@@ -55,10 +55,38 @@ export default function InfoScreen() {
         </View>
       </View>
 
+      <View style={styles.scopeSection}>
+        <View>
+          <Text style={[styles.scopeEyebrow, { color: colors.mutedForeground }]}>CURRENT SCOPE</Text>
+          <Text style={[styles.scopeTitle, { color: colors.foreground }]}>現在の対応範囲</Text>
+        </View>
+        {([
+          ['利用可能', 'アプリ内プレイヤー', 'FilesのMP3・M4A・WAVを再生し、Bass/Sub-bass/5バンドEQを適用', 'check-circle', true],
+          ['利用可能', 'Bluetooth出力検出', 'Crusher EVOの接続名と音声出力ルートを表示', 'bluetooth', true],
+          ['制限あり', 'Crusher EVO本体DSP', '標準Bluetooth経由で本体のEQ値を書き込む公開APIがないため未対応', 'slash', false],
+          ['対象外', 'Apple Music・YouTube', '他アプリの音声ストリームを取得して、このアプリのEQへ通すことは不可', 'x-circle', false],
+        ] as const).map(([status, title, body, icon, supported]) => (
+          <View key={title} style={[styles.scopeRow, { borderColor: colors.border }]}>
+            <Feather
+              name={icon as 'check-circle' | 'bluetooth' | 'slash' | 'x-circle'}
+              size={17}
+              color={supported ? colors.primary : colors.mutedForeground}
+            />
+            <View style={styles.scopeCopy}>
+              <View style={styles.scopeTitleRow}>
+                <Text style={[styles.scopeItemTitle, { color: colors.foreground }]}>{title}</Text>
+                <Text style={[styles.scopeStatus, { color: supported ? colors.primary : colors.mutedForeground }]}>{status}</Text>
+              </View>
+              <Text style={[styles.scopeBody, { color: colors.mutedForeground }]}>{body}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
       <View style={[styles.noticeCard, { backgroundColor: colors.accent }]}>
         <Feather name="info" size={16} color={colors.primary} />
         <Text style={[styles.noticeText, { color: colors.mutedForeground }]}>
-          Apple MusicなどへEQをかけるには、接続したヘッドフォン本体がEQ制御を受け付ける必要があります。標準Bluetoothだけでは第三者アプリから本体DSPを操作できないため、メーカー公式SDK/APIに対応したアダプター方式で追加します。
+          ヘッドホン本体のEQを実装するには、SkullcandyがCrusher EVO向けの制御仕様またはSDKを公開している必要があります。現在のBluetooth解析は読み取り専用で、書き込みは行いません。
         </Text>
       </View>
 
@@ -93,6 +121,15 @@ const styles = StyleSheet.create({
   limitCopy: { flex: 1, gap: 6 },
   limitTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   limitBody: { fontFamily: 'Inter_400Regular', fontSize: 11, lineHeight: 17 },
+  scopeSection: { gap: 9, marginTop: 5 },
+  scopeEyebrow: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 1.4 },
+  scopeTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, letterSpacing: -0.4, marginBottom: 2 },
+  scopeRow: { borderWidth: 1, borderRadius: 17, padding: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  scopeCopy: { flex: 1, gap: 4 },
+  scopeTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  scopeItemTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 13, flex: 1 },
+  scopeStatus: { fontFamily: 'Inter_600SemiBold', fontSize: 10 },
+  scopeBody: { fontFamily: 'Inter_400Regular', fontSize: 11, lineHeight: 16 },
   noticeCard: { borderRadius: 18, padding: 14, flexDirection: 'row', gap: 9 },
   noticeText: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 11, lineHeight: 17 },
   bluetoothButton: { minHeight: 52, borderRadius: 17, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 4 },
