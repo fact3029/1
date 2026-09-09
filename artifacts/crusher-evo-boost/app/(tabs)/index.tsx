@@ -224,7 +224,7 @@ export default function HomeScreen() {
       <View style={styles.note}>
         <Feather name="info" size={14} color={colors.mutedForeground} />
         <Text style={[styles.noteText, { color: colors.mutedForeground }]}>
-          iPhoneでは他アプリの音声へ常時EQをかけられないため、この設定はプリセットとして保存されます。
+          このEQはFilesから選んだ音源をアプリ内で再生するときに適用されます。Crusher EVO本体のDSP設定やApple Music・YouTubeの音声は変更しません。
         </Text>
       </View>
     </ScrollView>
