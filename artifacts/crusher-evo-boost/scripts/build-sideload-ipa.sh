@@ -166,7 +166,7 @@ grep -q "nonisolated(unsafe) let argumentsPtr = argumentsPtr" "${EXPO_JSI_RUNTIM
 echo "==> Installing iOS native dependencies"
 (
   cd ios
-  pod install --repo-update
+  pod install --repo-update 2>&1 | tee "${OUTPUT_ROOT}/pod-install.log"
 )
 
 grep -q "RNAudioAPI" ios/Podfile.lock ||
