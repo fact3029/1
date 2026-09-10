@@ -42,6 +42,16 @@ if grep -Rqs "CrusherEVOAudioUnit" ios; then
   fail "Audio Unit extension was unexpectedly included in the sideload build."
 fi
 
+echo "==> Configuring a source build for React Native dependencies"
+node <<'NODE'
+const fs = require('node:fs');
+const path = 'ios/Podfile.properties.json';
+const properties = JSON.parse(fs.readFileSync(path, 'utf8'));
+properties['ios.buildReactNativeFromSource'] = 'true';
+fs.writeFileSync(path, `${JSON.stringify(properties, null, 2)}\n`);
+NODE
+export EXPO_USE_PRECOMPILED_MODULES=0
+
 echo "==> Applying the Expo Modules JSI Xcode 26 compatibility patch"
 EXPO_JSI_HEADER="$(
   find "${APP_ROOT}/../../node_modules/.pnpm" \
