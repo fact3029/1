@@ -171,6 +171,10 @@ echo "==> Installing iOS native dependencies"
 
 grep -q "RNAudioAPI" ios/Podfile.lock ||
   fail "RNAudioAPI is missing from Podfile.lock; the native DSP module was not linked."
+grep -q "CrusherAudioUnit" ios/Podfile.lock ||
+  fail "CrusherAudioUnit is missing from Podfile.lock; the Bluetooth native module was not linked."
+grep -Rqs "CrusherAudioUnitModule" ios ||
+  fail "CrusherAudioUnitModule is missing from the generated iOS project."
 
 WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
 [[ -n "${WORKSPACE}" ]] || fail "No Xcode workspace was generated."
