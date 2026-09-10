@@ -2,12 +2,12 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BoostSlider } from '@/components/BoostSlider';
 import { BassTestCard } from '@/components/BassTestCard';
 import { OutputModeSelector } from '@/components/OutputModeSelector';
-import { activateAudioSession, subscribeToOutputRoute, type OutputRoute } from '@/audio/outputRoute';
+import { activateAudioSession, openBluetoothSettings, subscribeToOutputRoute, type OutputRoute } from '@/audio/outputRoute';
 import { useProfiles } from '@/context/ProfileContext';
 import { useColors } from '@/hooks/useColors';
 
@@ -51,9 +51,8 @@ export default function HomeScreen() {
   };
 
   const openBluetooth = async () => {
-    try {
-      await Linking.openURL('App-Prefs:Bluetooth');
-    } catch {
+    const opened = await openBluetoothSettings();
+    if (!opened) {
       Alert.alert('Bluetooth設定', 'iPhoneの「設定」からBluetoothを開き、S6EVWを接続してください。');
     }
   };
