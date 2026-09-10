@@ -86,6 +86,8 @@ export default function HomeScreen() {
             <Text style={[styles.cardTitle, { color: colors.foreground }]}>
               {outputRoute.isBluetooth && outputRoute.name
                 ? outputRoute.name
+                : outputRoute.isBluetooth
+                  ? 'Bluetoothオーディオ'
                 : outputRoute.connected
                   ? 'iPhoneスピーカー'
                   : 'Bluetooth出力を確認中'}
@@ -97,7 +99,7 @@ export default function HomeScreen() {
           </View>
           <Text style={[styles.cardBody, { color: colors.mutedForeground }]}>
             {outputRoute.isBluetooth
-              ? 'アプリ内テスト音は、このBluetooth出力へ送られます。'
+              ? 'アプリ内プレイヤーの音声は、このBluetooth出力へ送られます。'
               : outputRoute.connected
                 ? 'iPhoneのBluetooth設定でCrusher EVOを接続すると、ここに表示されます。'
                 : 'iPhoneのBluetooth設定でCrusher EVOを接続してください.'}
