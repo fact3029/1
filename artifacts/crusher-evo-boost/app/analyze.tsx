@@ -38,7 +38,10 @@ export default function AnalysisScreen() {
 
   const start = async () => {
     if (!available) {
-      Alert.alert('開発ビルドが必要です', 'Bluetooth解析はiOSのネイティブ開発ビルドで利用できます。Expo GoにはBluetoothモジュールが含まれていません。');
+      Alert.alert(
+        'Bluetoothモジュールを利用できません',
+        'このアプリのネイティブモジュールが読み込まれていません。最新のSideloadly IPAを再インストールして、Expo Goや古いIPAではなくこのアプリを起動してください。',
+      );
       return;
     }
     setEvents([]);
