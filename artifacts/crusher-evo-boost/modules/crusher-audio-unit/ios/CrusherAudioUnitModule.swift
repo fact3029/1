@@ -69,7 +69,7 @@ public final class CrusherAudioUnitModule: Module {
         ])
       }
       do {
-        try audioSession.setCategory(.playback, mode: .music, options: [.allowBluetooth, .allowBluetoothA2DP])
+        try audioSession.setCategory(.playback, mode: .default, options: [.allowBluetooth, .allowBluetoothA2DP])
         try audioSession.setActive(true)
         let route = currentOutputRoute()
         notifyOutputRouteChanged()
