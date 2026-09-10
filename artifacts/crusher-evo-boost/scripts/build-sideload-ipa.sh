@@ -213,7 +213,7 @@ const path = process.argv[2];
 const source = fs.readFileSync(path, 'utf8');
 const extensionMarker = 'public extension EventEmitter {';
 const wrapper = `private final class WeakEventEmitter: @unchecked Sendable {
-  weak var value: any EventEmitter?
+  weak var value: (any EventEmitter)?
 
   init(_ value: any EventEmitter) {
     self.value = value
