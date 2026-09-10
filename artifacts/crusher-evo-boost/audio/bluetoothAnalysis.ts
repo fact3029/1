@@ -13,6 +13,7 @@ export type AnalysisEvent = {
   hex?: string;
   length?: number;
   message?: string;
+  capturedAt?: number;
 };
 
 const MAX_ANALYSIS_EVENTS = 250;
@@ -47,8 +48,9 @@ function ensureNativeEventBridge() {
   if (!nativeModule) return;
 
   nativeSubscription = nativeModule.addListener('analysisEvent', (event) => {
-    analysisEvents = [...analysisEvents, event].slice(-MAX_ANALYSIS_EVENTS);
-    analysisListeners.forEach((listener) => listener(event));
+    const capturedEvent = { ...event, capturedAt: Date.now() };
+    analysisEvents = [...analysisEvents, capturedEvent].slice(-MAX_ANALYSIS_EVENTS);
+    analysisListeners.forEach((listener) => listener(capturedEvent));
   });
 }
 

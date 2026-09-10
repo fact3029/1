@@ -36,6 +36,17 @@ export default function AnalysisScreen() {
     () => events.filter((event) => event.type === 'peripheral' && event.id).filter((event, index, all) => all.findIndex((item) => item.id === event.id) === index),
     [events],
   );
+  const summary = useMemo(
+    () => ({
+      devices: peripherals.length,
+      connected: events.filter((event) => event.type === 'connected').length,
+      services: events.filter((event) => event.type === 'service').length,
+      characteristics: events.filter((event) => event.type === 'characteristic').length,
+      values: events.filter((event) => event.type === 'value').length,
+      writable: events.filter((event) => event.type === 'characteristic' && event.properties?.includes('write')).length,
+    }),
+    [events, peripherals.length],
+  );
 
   const start = async () => {
     if (!available) {
@@ -48,12 +59,24 @@ export default function AnalysisScreen() {
     clearAnalysisEvents();
     setEvents([]);
     setRunning(true);
-    await startBluetoothAnalysis();
+    try {
+      const started = await startBluetoothAnalysis();
+      if (!started) {
+        setRunning(false);
+        Alert.alert('解析を開始できません', 'Bluetooth解析用のネイティブモジュールが利用できません。Sideloadly版IPAを確認してください。');
+      }
+    } catch (error) {
+      setRunning(false);
+      Alert.alert('解析を開始できません', error instanceof Error ? error.message : 'Bluetooth解析を開始できませんでした。');
+    }
   };
 
   const stop = async () => {
-    await stopBluetoothAnalysis();
-    setRunning(false);
+    try {
+      await stopBluetoothAnalysis();
+    } finally {
+      setRunning(false);
+    }
   };
 
   const shareLog = async () => {
@@ -87,7 +110,7 @@ export default function AnalysisScreen() {
         <View style={[styles.warning, { backgroundColor: colors.accent }]}>
           <Feather name="shield" size={16} color={colors.primary} />
           <Text style={[styles.warningText, { color: colors.mutedForeground }]}>
-            読み取り専用です。EQ値の書き込みや、公式アプリの通信の盗聴は行いません。
+            読み取り専用です。検出・接続・サービス・Characteristic・読み取り値を記録します。EQ値の書き込みや、公式アプリの通信の盗聴は行いません。
           </Text>
         </View>
 
@@ -109,6 +132,26 @@ export default function AnalysisScreen() {
             <Text style={[styles.secondaryLabel, { color: colors.foreground }]}>ログを共有</Text>
           </Pressable>
         </View>
+
+        {events.length > 0 ? (
+          <View style={[styles.summary, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.logHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>今回の収集結果</Text>
+              <Text style={[styles.count, { color: colors.mutedForeground }]}>解釈ではなく観測値</Text>
+            </View>
+            <View style={styles.summaryGrid}>
+              <SummaryItem label="機器" value={summary.devices} colors={colors} />
+              <SummaryItem label="接続" value={summary.connected} colors={colors} />
+              <SummaryItem label="サービス" value={summary.services} colors={colors} />
+              <SummaryItem label="Characteristic" value={summary.characteristics} colors={colors} />
+              <SummaryItem label="読み取り値" value={summary.values} colors={colors} />
+              <SummaryItem label="書き込み候補" value={summary.writable} colors={colors} />
+            </View>
+            <Text style={[styles.summaryNote, { color: colors.mutedForeground }]}>
+              「書き込み候補」はwrite権限が見えるだけで、EQ設定用とは判定できません。
+            </Text>
+          </View>
+        ) : null}
 
         {peripherals.length > 0 ? (
           <View style={styles.section}>
@@ -158,10 +201,27 @@ export default function AnalysisScreen() {
 
 function formatEvent(event: AnalysisEvent): string {
   if (event.type === 'peripheral') return `[device] ${event.name || 'Unknown'} (${event.id || '—'})`;
+  if (event.type === 'connected') return `[connected] ${event.name || 'Unknown'} (${event.id || '—'})`;
   if (event.type === 'service') return `[service] ${event.uuid}`;
-  if (event.type === 'characteristic') return `[characteristic] ${event.uuid} · ${event.properties || '—'}`;
-  if (event.type === 'value') return `[value] ${event.uuid} · ${event.hex || '(empty)'}`;
-  return `[${event.type}] ${event.message || event.name || ''}`;
+  if (event.type === 'characteristic') {
+    return `[characteristic] ${event.serviceUuid || '—'} / ${event.uuid} · ${event.properties || '—'}`;
+  }
+  if (event.type === 'value') return `[read] ${event.uuid} · ${event.hex || '(empty)'} (${event.length ?? 0} bytes)`;
+  const timestamp = event.capturedAt ? ` ${formatTimestamp(event.capturedAt)}` : '';
+  return `[${event.type}]${timestamp} ${event.message || event.name || ''}`;
+}
+
+function formatTimestamp(timestamp: number) {
+  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function SummaryItem({ label, value, colors }: { label: string; value: number; colors: ReturnType<typeof useColors> }) {
+  return (
+    <View style={[styles.summaryItem, { backgroundColor: colors.background }]}>
+      <Text style={[styles.summaryValue, { color: colors.foreground }]}>{value}</Text>
+      <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>{label}</Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -178,6 +238,12 @@ const styles = StyleSheet.create({
   primaryLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   secondaryButton: { minHeight: 48, borderRadius: 16, borderWidth: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 9 },
   secondaryLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  summary: { borderRadius: 16, borderWidth: 1, padding: 12, gap: 10 },
+  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  summaryItem: { width: '31%', minHeight: 53, borderRadius: 11, padding: 8, justifyContent: 'center', gap: 2 },
+  summaryValue: { fontFamily: 'Inter_700Bold', fontSize: 18 },
+  summaryLabel: { fontFamily: 'Inter_400Regular', fontSize: 9 },
+  summaryNote: { fontFamily: 'Inter_400Regular', fontSize: 10, lineHeight: 15 },
   section: { gap: 8, marginTop: 4 },
   sectionTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   logHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

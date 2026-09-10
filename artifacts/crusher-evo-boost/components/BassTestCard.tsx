@@ -2,8 +2,8 @@ import * as Haptics from 'expo-haptics';
 import * as DocumentPicker from 'expo-document-picker';
 import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
-import { BassTestSession, startAudioFile } from '@/audio/audioEngine';
+import { ActivityIndicator, Alert, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BassTestSession, startAudioFile, startBassTest } from '@/audio/audioEngine';
 import { useColors } from '@/hooks/useColors';
 
 type BassTestCardProps = {
@@ -12,12 +12,18 @@ type BassTestCardProps = {
   bands: number[];
 };
 
+type PlayerSource =
+  | { kind: 'file'; uri: string; name: string }
+  | { kind: 'builtIn'; id: string; name: string };
+
 export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
   const colors = useColors();
   const [playing, setPlaying] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<{ uri: string; name: string } | null>(null);
+  const [source, setSource] = useState<PlayerSource | null>(null);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const sessionRef = useRef<BassTestSession | null>(null);
 
   useEffect(() => {
@@ -65,21 +71,30 @@ export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
       return;
     }
 
-    if (!selectedFile) {
-      Alert.alert('曲を選択してください', '「曲を選ぶ」からFilesにある音声ファイルを選択してください。');
+    if (!source) {
+      Alert.alert('音源を選択してください', 'Filesの音源、または「内蔵テスト音源を使う」を選択してください。');
       return;
     }
 
+    setErrorMessage(null);
+    setLoading(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      const session = await startAudioFile(selectedFile.uri, { bassBoost, subBass, bands });
+      const session =
+        source.kind === 'file'
+          ? await startAudioFile(source.uri, { bassBoost, subBass, bands })
+          : await startBassTest({ bassBoost, subBass, bands }, source.id);
       sessionRef.current = session;
       const initialPosition = session.getPosition();
       setPosition(initialPosition.currentTime);
       setDuration(initialPosition.duration);
       setPlaying(true);
     } catch (error) {
-      Alert.alert('再生できません', error instanceof Error ? error.message : '音声ファイルを再生できませんでした。');
+      const message = error instanceof Error ? error.message : '音声ファイルを再生できませんでした。';
+      setErrorMessage(message);
+      Alert.alert('再生できません', message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -93,7 +108,16 @@ export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
     if (playing) stop();
     setPosition(0);
     setDuration(0);
-    setSelectedFile({ uri: result.assets[0].uri, name: result.assets[0].name });
+    setErrorMessage(null);
+    setSource({ kind: 'file', uri: result.assets[0].uri, name: result.assets[0].name });
+  };
+
+  const chooseBuiltInTest = () => {
+    if (playing) stop();
+    setPosition(0);
+    setDuration(0);
+    setErrorMessage(null);
+    setSource({ kind: 'builtIn', id: 'crusher-pulse', name: 'Crusher Pulse（内蔵テスト）' });
   };
 
   return (
@@ -119,26 +143,43 @@ export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
         >
           <Feather name="folder" size={14} color={colors.foreground} />
           <Text numberOfLines={1} style={[styles.chooseLabel, { color: colors.foreground }]}>
-            {selectedFile?.name ?? 'Filesから曲を選ぶ'}
+            {source?.name ?? 'Filesから曲を選ぶ'}
           </Text>
         </Pressable>
-        {duration > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={chooseBuiltInTest}
+          style={({ pressed }) => [
+            styles.testButton,
+            { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+          ]}
+        >
+          <Feather name="activity" size={14} color={colors.foreground} />
+          <Text style={[styles.testLabel, { color: colors.foreground }]}>内蔵テスト音源を使う</Text>
+        </Pressable>
+        {source ? (
           <View style={styles.playerControls}>
             <View style={styles.timeRow}>
               <Text style={[styles.timeLabel, { color: colors.mutedForeground }]}>{formatTime(position)}</Text>
               <Text style={[styles.timeLabel, { color: colors.mutedForeground }]}>{formatTime(duration)}</Text>
             </View>
-            <ProgressScrubber
-              position={position}
-              duration={duration}
-              onSeek={(nextPosition) => {
-                sessionRef.current?.seek(nextPosition);
-                setPosition(nextPosition);
-              }}
-              trackColor={colors.secondary}
-              fillColor={colors.primary}
-              thumbBorderColor={colors.card}
-            />
+            {duration > 0 ? (
+              <ProgressScrubber
+                position={position}
+                duration={duration}
+                onSeek={(nextPosition) => {
+                  sessionRef.current?.seek(nextPosition);
+                  setPosition(nextPosition);
+                }}
+                trackColor={colors.secondary}
+                fillColor={colors.primary}
+                thumbBorderColor={colors.card}
+              />
+            ) : (
+              <View style={styles.scrubberTouch}>
+                <View style={[styles.scrubberTrack, { backgroundColor: colors.secondary }]} />
+              </View>
+            )}
             <View style={styles.seekRow}>
               <Pressable
                 accessibilityRole="button"
@@ -159,6 +200,9 @@ export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
                 <Text style={[styles.seekLabel, { color: colors.foreground }]}>10秒</Text>
               </Pressable>
             </View>
+            <Text style={[styles.statusText, { color: errorMessage ? colors.destructive : colors.mutedForeground }]}>
+              {errorMessage ?? (loading ? '音源を読み込んでいます…' : duration > 0 ? '再生位置をドラッグできます' : '再生時間を読み込んでいます…')}
+            </Text>
           </View>
         ) : null}
       </View>
@@ -166,14 +210,19 @@ export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
         accessibilityRole="button"
         testID="bass-test-toggle"
         onPress={() => void toggle()}
+        disabled={loading}
         style={({ pressed }) => [
           styles.button,
-          { backgroundColor: colors.primary, opacity: pressed ? 0.72 : 1 },
+          { backgroundColor: colors.primary, opacity: loading ? 0.65 : pressed ? 0.72 : 1 },
         ]}
       >
-        <Feather name={playing ? 'square' : 'play'} size={15} color={colors.primaryForeground} />
+        {loading ? (
+          <ActivityIndicator size="small" color={colors.primaryForeground} />
+        ) : (
+          <Feather name={playing ? 'square' : 'play'} size={15} color={colors.primaryForeground} />
+        )}
         <Text style={[styles.buttonLabel, { color: colors.primaryForeground }]}>
-          {playing ? '停止' : '再生'}
+          {loading ? '読み込み中…' : playing ? '停止' : '選択した曲を再生'}
         </Text>
       </Pressable>
     </View>
@@ -286,6 +335,9 @@ const styles = StyleSheet.create({
   seekRow: { flexDirection: 'row', gap: 8 },
   seekButton: { minHeight: 30, borderWidth: 1, borderRadius: 9, paddingHorizontal: 9, flexDirection: 'row', alignItems: 'center', gap: 5 },
   seekLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10 },
-  button: { alignSelf: 'flex-end', minWidth: 66, height: 38, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  testButton: { minHeight: 34, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  testLabel: { fontFamily: 'Inter_500Medium', fontSize: 10 },
+  statusText: { fontFamily: 'Inter_400Regular', fontSize: 10, lineHeight: 15 },
+  button: { alignSelf: 'stretch', minHeight: 46, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   buttonLabel: { fontFamily: 'Inter_700Bold', fontSize: 12 },
 });

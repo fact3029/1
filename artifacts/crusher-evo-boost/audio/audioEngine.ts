@@ -32,6 +32,18 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
+function normalizeAudioFilePath(uri: string) {
+  if (!uri.startsWith('file://')) return uri;
+
+  const path = uri.replace(/^file:\/\//, '');
+  const withoutLocalhost = path.startsWith('localhost/') ? path.slice('localhost'.length) : path;
+  try {
+    return decodeURIComponent(withoutLocalhost);
+  } catch {
+    return withoutLocalhost;
+  }
+}
+
 function createSoftClipCurve() {
   const curve = new Float32Array(4096);
   const drive = 1.25;
@@ -170,22 +182,28 @@ export async function startBassTest(
 ): Promise<BassTestSession> {
   await activateAudioSession();
   const context = new AudioContext();
-  const source = context.createBufferSource({ pitchCorrection: true });
+  await context.resume();
   const eq = createEqChain(context, 0.26);
   const buffer = createTrackBuffer(context, trackId);
-  const now = context.currentTime;
+  const duration = 12;
+  let startedAt = context.currentTime;
+  let source = context.createBufferSource({ pitchCorrection: true });
 
   source.buffer = buffer;
-  source.loop = true;
+  source.loop = false;
   eq.update(settings);
   source.connect(eq.input);
-  source.start(now);
+  source.start(startedAt);
 
   let stopped = false;
   const stop = () => {
     if (stopped) return;
     stopped = true;
-    source.stop();
+    try {
+      source.stop();
+    } catch {
+      // The source may have ended between the timer tick and cleanup.
+    }
     source.disconnect();
     eq.disconnect();
     void context.close();
@@ -194,8 +212,26 @@ export async function startBassTest(
   return {
     stop,
     update: eq.update,
-    seek: () => undefined,
-    getPosition: () => ({ currentTime: 0, duration: 0 }),
+    seek: (seconds: number) => {
+      if (stopped) return;
+      const nextPosition = clamp(seconds, 0, duration);
+      try {
+        source.stop();
+      } catch {
+        return;
+      }
+      source.disconnect();
+      source = context.createBufferSource({ pitchCorrection: true });
+      source.buffer = buffer;
+      source.loop = false;
+      source.connect(eq.input);
+      startedAt = context.currentTime - nextPosition;
+      source.start(context.currentTime + 0.02, nextPosition);
+    },
+    getPosition: () => ({
+      currentTime: clamp(context.currentTime - startedAt, 0, duration),
+      duration,
+    }),
   };
 }
 
@@ -205,9 +241,9 @@ export async function startAudioFile(
 ): Promise<BassTestSession> {
   await activateAudioSession();
   const context = new AudioContext();
-  const sourceUri = uri;
+  await context.resume();
   const source = context.context.createFileSource({
-    source: sourceUri,
+    source: normalizeAudioFilePath(uri),
     loop: false,
     volume: 0.82,
     playbackRate: 1,
@@ -218,11 +254,15 @@ export async function startAudioFile(
     await context.close();
     throw new Error('この音声形式を再生できません。MP3、M4A、WAVのいずれかを選択してください。');
   }
+  if (!Number.isFinite(source.duration) || source.duration <= 0) {
+    await context.close();
+    throw new Error('音声をデコードできませんでした。このIPAで再生できるMP3、M4A、またはWAVを選択してください。');
+  }
 
   const eq = createRawEqChain(context, 0.56);
   eq.update(settings);
   source.connect(eq.input);
-  source.start(context.currentTime);
+  source.start(context.currentTime + 0.02);
 
   const getPosition = () => ({
     currentTime: Math.max(0, source.currentTime),
@@ -238,7 +278,11 @@ export async function startAudioFile(
   const stop = () => {
     if (stopped) return;
     stopped = true;
-    source.stop(context.currentTime + 0.05);
+      try {
+        source.stop(context.currentTime + 0.05);
+      } catch {
+        // The source may have ended between the timer tick and cleanup.
+      }
     source.disconnect();
     eq.disconnect();
     void context.close();

@@ -114,6 +114,12 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
+      <BassTestCard
+        bassBoost={activeProfile.bassBoost}
+        subBass={activeProfile.subBass}
+        bands={activeProfile.bands}
+      />
+
       <OutputModeSelector
         selectedMode={outputMode}
         onChange={setOutputMode}
@@ -152,12 +158,6 @@ export default function HomeScreen() {
           onChange={(value) => updateActive({ subBass: Math.round((value / 100) * 12 - 6) })}
         />
       </View>
-
-      <BassTestCard
-        bassBoost={activeProfile.bassBoost}
-        subBass={activeProfile.subBass}
-        bands={activeProfile.bands}
-      />
 
       <View style={styles.sectionHeading}>
         <View>
