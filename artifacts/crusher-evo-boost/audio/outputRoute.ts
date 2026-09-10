@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { requireNativeModule } from 'expo-modules-core';
 
 export type OutputRoute = {
@@ -60,4 +60,23 @@ export function describeOutputRoute(route: OutputRoute): string {
   if (route.isBluetooth && route.name) return `Bluetooth · ${route.name}`;
   if (route.connected) return route.name || 'iPhoneスピーカー';
   return '出力先を確認できません';
+}
+
+export async function openBluetoothSettings(): Promise<boolean> {
+  const bluetoothSettingsUrls = ['App-Prefs:root=Bluetooth', 'App-Prefs:Bluetooth'];
+  for (const url of bluetoothSettingsUrls) {
+    try {
+      await Linking.openURL(url);
+      return true;
+    } catch {
+      // Try the next iOS Settings URL format.
+    }
+  }
+
+  try {
+    await Linking.openSettings();
+    return true;
+  } catch {
+    return false;
+  }
 }
