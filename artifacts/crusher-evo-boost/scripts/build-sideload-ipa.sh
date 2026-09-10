@@ -196,6 +196,62 @@ grep -Fq "private struct SendableHostFunctionPointers: @unchecked Sendable" "${E
 grep -q "nonisolated(unsafe) let argumentsPtr = argumentsPtr" "${EXPO_JSI_RUNTIME}" &&
   fail "The incompatible Swift pointer capture is still present."
 
+echo "==> Applying the Expo Modules Core EventEmitter Swift 6 compatibility patch"
+EXPO_EVENT_EMITTER="$(
+  find "${APP_ROOT}/../../node_modules/.pnpm" \
+    -path '*/expo-modules-core@*/ios/Core/Events/EventEmitter.swift' \
+    -print \
+    -quit
+)"
+[[ -f "${EXPO_EVENT_EMITTER}" ]] ||
+  fail "expo-modules-core EventEmitter.swift was not found."
+
+node - "${EXPO_EVENT_EMITTER}" <<'NODE'
+const fs = require('node:fs');
+
+const path = process.argv[2];
+const source = fs.readFileSync(path, 'utf8');
+const extensionMarker = 'public extension EventEmitter {';
+const wrapper = `private final class WeakEventEmitter: @unchecked Sendable {
+  weak var value: any EventEmitter?
+
+  init(_ value: any EventEmitter) {
+    self.value = value
+  }
+}
+
+`;
+if (source.split(extensionMarker).length !== 2) {
+  throw new Error(`Expected one EventEmitter extension in ${path}.`);
+}
+let patched = source.replace(extensionMarker, wrapper + extensionMarker);
+
+const unsafeEmitter = 'nonisolated(unsafe) weak let emitter = self';
+if (patched.split(unsafeEmitter).length !== 3) {
+  throw new Error(`Expected two nonisolated emitter captures in ${path}.`);
+}
+patched = patched.replaceAll(unsafeEmitter, 'let emitter = WeakEventEmitter(self)');
+
+const firstGuard = 'guard let emitter else {';
+if (patched.split(firstGuard).length !== 2) {
+  throw new Error(`Expected one simple emitter guard in ${path}.`);
+}
+patched = patched.replace(firstGuard, 'guard let emitter = emitter.value else {');
+
+const secondGuard = 'guard let emitter, let appContext else {';
+if (patched.split(secondGuard).length !== 2) {
+  throw new Error(`Expected one payload emitter guard in ${path}.`);
+}
+patched = patched.replace(secondGuard, 'guard let emitter = emitter.value, let appContext else {');
+
+fs.writeFileSync(path, patched);
+NODE
+
+grep -Fq "private final class WeakEventEmitter: @unchecked Sendable" "${EXPO_EVENT_EMITTER}" ||
+  fail "The Expo EventEmitter Sendable wrapper was not added."
+grep -q "nonisolated(unsafe) weak let emitter" "${EXPO_EVENT_EMITTER}" &&
+  fail "The incompatible Expo EventEmitter capture is still present."
+
 echo "==> Installing iOS native dependencies"
 if ! (
   cd ios
