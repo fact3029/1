@@ -170,7 +170,7 @@ if ! (
 ); then
   POD_DETAILS="$(
     sed -E $'s/\033\\[[0-9;]*[mK]//g' "${OUTPUT_ROOT}/pod-install.log" |
-      grep -v '^\[Codegen\]' |
+      grep -v -E '^\[Codegen\]|link_native_modules!|ios_packages=>' |
       tail -n 40 |
       tr '\n' ' ' |
       cut -c1-6000
