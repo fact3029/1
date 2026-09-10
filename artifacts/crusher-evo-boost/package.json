@@ -55,6 +55,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "@workspace/crusher-audio-unit": "workspace:*",
     "expo": "~57.0.7",
     "expo-document-picker": "~57.0.1",
     "react": "19.2.3",
