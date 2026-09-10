@@ -2,14 +2,18 @@ import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { openBluetoothSettings } from '@/audio/outputRoute';
 import { useColors } from '@/hooks/useColors';
 
 export default function InfoScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
-  const openBluetooth = () => {
-    void Linking.openURL('App-Prefs:Bluetooth');
+  const openBluetooth = async () => {
+    const opened = await openBluetoothSettings();
+    if (!opened) {
+      void Linking.openSettings();
+    }
   };
 
   return (
