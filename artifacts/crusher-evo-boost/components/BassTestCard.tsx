@@ -25,6 +25,7 @@ export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const sessionRef = useRef<BassTestSession | null>(null);
+  const startingRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -66,6 +67,8 @@ export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
   };
 
   const toggle = async () => {
+    if (startingRef.current) return;
+
     if (playing) {
       stop();
       return;
@@ -76,10 +79,13 @@ export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
       return;
     }
 
+    startingRef.current = true;
     setErrorMessage(null);
     setLoading(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
+      sessionRef.current?.stop();
+      sessionRef.current = null;
       const session =
         source.kind === 'file'
           ? await startAudioFile(source.uri, { bassBoost, subBass, bands })
@@ -94,6 +100,7 @@ export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
       setErrorMessage(message);
       Alert.alert('再生できません', message);
     } finally {
+      startingRef.current = false;
       setLoading(false);
     }
   };

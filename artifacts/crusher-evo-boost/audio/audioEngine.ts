@@ -71,7 +71,7 @@ function createEqChain(context: AudioContext, masterGain: number) {
   safety.oversample = '4x';
 
   const update = (settings: BassTestSettings) => {
-    lowShelf.gain.value = clamp(2 + settings.bassBoost * 0.09 + settings.subBass * 0.4, -2, 10);
+    lowShelf.gain.value = clamp(2 + settings.bassBoost * 0.12 + settings.subBass * 0.55, -2, 12);
     bandFilters.forEach((filter, index) => {
       filter.type = 'peaking';
       filter.frequency.value = EQ_FREQUENCIES[index];
@@ -115,7 +115,7 @@ function createRawEqChain(context: AudioContext, masterGain: number) {
   safety.oversample = '4x';
 
   const update = (settings: BassTestSettings) => {
-    lowShelf.gain.value = clamp(2 + settings.bassBoost * 0.09 + settings.subBass * 0.4, -2, 10);
+    lowShelf.gain.value = clamp(2 + settings.bassBoost * 0.12 + settings.subBass * 0.55, -2, 12);
     bandFilters.forEach((filter, index) => {
       filter.type = 'peaking';
       filter.frequency.value = EQ_FREQUENCIES[index];
@@ -200,7 +200,7 @@ export async function startBassTest(
     if (stopped) return;
     stopped = true;
     try {
-      source.stop();
+      source.stop(context.currentTime);
     } catch {
       // The source may have ended between the timer tick and cleanup.
     }
@@ -278,11 +278,11 @@ export async function startAudioFile(
   const stop = () => {
     if (stopped) return;
     stopped = true;
-      try {
-        source.stop(context.currentTime + 0.05);
-      } catch {
-        // The source may have ended between the timer tick and cleanup.
-      }
+    try {
+      source.stop(context.currentTime);
+    } catch {
+      // The source may have ended between the timer tick and cleanup.
+    }
     source.disconnect();
     eq.disconnect();
     void context.close();
