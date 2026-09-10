@@ -168,7 +168,13 @@ if ! (
   cd ios
   pod install --repo-update 2>&1 | tee "${OUTPUT_ROOT}/pod-install.log"
 ); then
-  POD_DETAILS="$(tail -n 80 "${OUTPUT_ROOT}/pod-install.log" | tr '\n' ' ' | cut -c1-6000)"
+  POD_DETAILS="$(
+    sed -E $'s/\033\\[[0-9;]*[mK]//g' "${OUTPUT_ROOT}/pod-install.log" |
+      grep -v '^\[Codegen\]' |
+      tail -n 40 |
+      tr '\n' ' ' |
+      cut -c1-6000
+  )"
   echo "::error title=pod install details::${POD_DETAILS}"
   exit 1
 fi
