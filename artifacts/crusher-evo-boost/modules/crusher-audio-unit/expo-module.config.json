@@ -1,6 +1,7 @@
 {
-  "platforms": ["ios"],
-  "ios": {
-    "modules": ["CrusherAudioUnitModule"]
+  "platforms": ["apple"],
+  "apple": {
+    "modules": ["CrusherAudioUnitModule"],
+    "podspecPath": "ios/CrusherAudioUnit.podspec"
   }
 }
