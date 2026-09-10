@@ -164,10 +164,14 @@ grep -q "nonisolated(unsafe) let argumentsPtr = argumentsPtr" "${EXPO_JSI_RUNTIM
   fail "The incompatible Swift pointer capture is still present."
 
 echo "==> Installing iOS native dependencies"
-(
+if ! (
   cd ios
   pod install --repo-update 2>&1 | tee "${OUTPUT_ROOT}/pod-install.log"
-)
+); then
+  POD_DETAILS="$(tail -n 80 "${OUTPUT_ROOT}/pod-install.log" | tr '\n' ' ' | cut -c1-6000)"
+  echo "::error title=pod install details::${POD_DETAILS}"
+  exit 1
+fi
 
 grep -q "RNAudioAPI" ios/Podfile.lock ||
   fail "RNAudioAPI is missing from Podfile.lock; the native DSP module was not linked."
