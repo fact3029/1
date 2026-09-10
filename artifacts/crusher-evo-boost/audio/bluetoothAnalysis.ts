@@ -15,6 +15,8 @@ export type AnalysisEvent = {
   message?: string;
 };
 
+const MAX_ANALYSIS_EVENTS = 250;
+
 type CrusherAnalysisModule = {
   startBluetoothAnalysis: () => Promise<void>;
   stopBluetoothAnalysis: () => Promise<void>;
@@ -25,6 +27,11 @@ type CrusherAnalysisModule = {
   ) => { remove: () => void };
 };
 
+let analysisEvents: AnalysisEvent[] = [];
+let analysisRunning = false;
+let nativeSubscription: { remove: () => void } | null = null;
+const analysisListeners = new Set<(event: AnalysisEvent) => void>();
+
 function getNativeModule(): CrusherAnalysisModule | null {
   if (Platform.OS !== 'ios') return null;
   try {
@@ -34,19 +41,47 @@ function getNativeModule(): CrusherAnalysisModule | null {
   }
 }
 
+function ensureNativeEventBridge() {
+  if (nativeSubscription) return;
+  const nativeModule = getNativeModule();
+  if (!nativeModule) return;
+
+  nativeSubscription = nativeModule.addListener('analysisEvent', (event) => {
+    analysisEvents = [...analysisEvents, event].slice(-MAX_ANALYSIS_EVENTS);
+    analysisListeners.forEach((listener) => listener(event));
+  });
+}
+
 export function isBluetoothAnalysisAvailable(): boolean {
   return getNativeModule() !== null;
 }
 
+export function getAnalysisSnapshot(): { events: AnalysisEvent[]; running: boolean } {
+  return {
+    events: [...analysisEvents],
+    running: analysisRunning,
+  };
+}
+
+export function clearAnalysisEvents() {
+  analysisEvents = [];
+}
+
 export function subscribeToAnalysis(listener: (event: AnalysisEvent) => void): { remove: () => void } {
-  const nativeModule = getNativeModule();
-  if (!nativeModule) return { remove: () => undefined };
-  return nativeModule.addListener('analysisEvent', listener);
+  ensureNativeEventBridge();
+  analysisListeners.add(listener);
+  return {
+    remove: () => {
+      analysisListeners.delete(listener);
+    },
+  };
 }
 
 export async function startBluetoothAnalysis(): Promise<boolean> {
   const nativeModule = getNativeModule();
   if (!nativeModule) return false;
+  ensureNativeEventBridge();
+  analysisRunning = true;
   await nativeModule.startBluetoothAnalysis();
   return true;
 }
@@ -55,6 +90,7 @@ export async function stopBluetoothAnalysis(): Promise<boolean> {
   const nativeModule = getNativeModule();
   if (!nativeModule) return false;
   await nativeModule.stopBluetoothAnalysis();
+  analysisRunning = false;
   return true;
 }
 

@@ -11,11 +11,14 @@ type BoostSliderProps = {
 
 export function BoostSlider({ value, onChange, label, helper }: BoostSliderProps) {
   const colors = useColors();
-  const [trackWidth, setTrackWidth] = useState(1);
+  const trackWidthRef = useRef(1);
+  const trackLeftRef = useRef(0);
   const trackRef = useRef<View>(null);
 
-  const setFromX = (x: number) => {
-    const next = Math.round(Math.min(100, Math.max(0, (x / trackWidth) * 100)));
+  const setFromPageX = (pageX: number) => {
+    const next = Math.round(
+      Math.min(100, Math.max(0, ((pageX - trackLeftRef.current) / trackWidthRef.current) * 100)),
+    );
     onChange(next);
   };
 
@@ -23,10 +26,19 @@ export function BoostSlider({ value, onChange, label, helper }: BoostSliderProps
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (event) => setFromX(event.nativeEvent.locationX),
-      onPanResponderMove: (event) => setFromX(event.nativeEvent.locationX),
+      onPanResponderGrant: (_, gestureState) => setFromPageX(gestureState.moveX),
+      onPanResponderMove: (_, gestureState) => setFromPageX(gestureState.moveX),
     }),
   ).current;
+
+  const handleTrackLayout = () => {
+    trackRef.current?.measureInWindow((x, _y, width) => {
+      if (width > 0) {
+        trackWidthRef.current = width;
+        trackLeftRef.current = x;
+      }
+    });
+  };
 
   return (
     <View style={styles.wrap}>
@@ -39,8 +51,12 @@ export function BoostSlider({ value, onChange, label, helper }: BoostSliderProps
       </View>
       <View
         ref={trackRef}
-        onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+        onLayout={handleTrackLayout}
         style={[styles.track, { backgroundColor: colors.secondary }]}
+        hitSlop={{ top: 18, bottom: 18 }}
+        accessibilityRole="adjustable"
+        accessibilityLabel={label}
+        accessibilityValue={{ min: 0, max: 100, now: value }}
         {...panResponder.panHandlers}
       >
         <View style={[styles.fill, { backgroundColor: colors.primary, width: `${value}%` }]} />
@@ -65,7 +81,7 @@ const styles = StyleSheet.create({
   label: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
   helper: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 3 },
   value: { fontFamily: 'Inter_700Bold', fontSize: 19 },
-  track: { height: 8, borderRadius: 8, justifyContent: 'center' },
+  track: { height: 8, borderRadius: 8, justifyContent: 'center', marginVertical: 18 },
   fill: { height: 8, borderRadius: 8 },
   thumb: {
     position: 'absolute',

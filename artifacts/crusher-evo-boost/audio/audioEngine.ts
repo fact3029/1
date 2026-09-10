@@ -21,7 +21,117 @@ export const BUILT_IN_TRACKS: BuiltInTrack[] = [
 
 export type BassTestSession = {
   stop: () => void;
+  update: (settings: BassTestSettings) => void;
+  seek: (seconds: number) => void;
+  getPosition: () => { currentTime: number; duration: number };
 };
+
+const EQ_FREQUENCIES = [60, 150, 400, 1000, 4000];
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function createSoftClipCurve() {
+  const curve = new Float32Array(4096);
+  const drive = 1.25;
+  const normalization = Math.tanh(drive);
+
+  for (let index = 0; index < curve.length; index += 1) {
+    const input = (index / (curve.length - 1)) * 2 - 1;
+    curve[index] = Math.tanh(input * drive) / normalization;
+  }
+
+  return curve;
+}
+
+function createEqChain(context: AudioContext, masterGain: number) {
+  const graph = context;
+  const lowShelf = graph.createBiquadFilter();
+  const bandFilters = EQ_FREQUENCIES.map(() => graph.createBiquadFilter());
+  const master = graph.createGain();
+  const safety = graph.createWaveShaper();
+
+  lowShelf.type = 'lowshelf';
+  lowShelf.frequency.value = 120;
+  master.gain.value = masterGain;
+  safety.curve = createSoftClipCurve();
+  safety.oversample = '4x';
+
+  const update = (settings: BassTestSettings) => {
+    lowShelf.gain.value = clamp(2 + settings.bassBoost * 0.09 + settings.subBass * 0.4, -2, 10);
+    bandFilters.forEach((filter, index) => {
+      filter.type = 'peaking';
+      filter.frequency.value = EQ_FREQUENCIES[index];
+      filter.Q.value = 0.85;
+      filter.gain.value = clamp(settings.bands[index] ?? 0, -6, 6);
+    });
+  };
+
+  let previous: typeof lowShelf = lowShelf;
+  bandFilters.forEach((filter) => {
+    previous.connect(filter);
+    previous = filter;
+  });
+  previous.connect(master);
+  master.connect(safety);
+  safety.connect(graph.destination);
+
+  return {
+    input: lowShelf,
+    update,
+    disconnect: () => {
+      lowShelf.disconnect();
+      bandFilters.forEach((filter) => filter.disconnect());
+      master.disconnect();
+      safety.disconnect();
+    },
+  };
+}
+
+function createRawEqChain(context: AudioContext, masterGain: number) {
+  const graph = context.context;
+  const lowShelf = graph.createBiquadFilter({});
+  const bandFilters = EQ_FREQUENCIES.map(() => graph.createBiquadFilter({}));
+  const master = graph.createGain({});
+  const safety = graph.createWaveShaper({});
+
+  lowShelf.type = 'lowshelf';
+  lowShelf.frequency.value = 120;
+  master.gain.value = masterGain;
+  safety.setCurve(createSoftClipCurve());
+  safety.oversample = '4x';
+
+  const update = (settings: BassTestSettings) => {
+    lowShelf.gain.value = clamp(2 + settings.bassBoost * 0.09 + settings.subBass * 0.4, -2, 10);
+    bandFilters.forEach((filter, index) => {
+      filter.type = 'peaking';
+      filter.frequency.value = EQ_FREQUENCIES[index];
+      filter.Q.value = 0.85;
+      filter.gain.value = clamp(settings.bands[index] ?? 0, -6, 6);
+    });
+  };
+
+  let previous = lowShelf;
+  bandFilters.forEach((filter) => {
+    previous.connect(filter);
+    previous = filter;
+  });
+  previous.connect(master);
+  master.connect(safety);
+  safety.connect(graph.destination);
+
+  return {
+    input: lowShelf,
+    update,
+    disconnect: () => {
+      lowShelf.disconnect();
+      bandFilters.forEach((filter) => filter.disconnect());
+      master.disconnect();
+      safety.disconnect();
+    },
+  };
+}
 
 function createTrackBuffer(context: AudioContext, trackId: string) {
   const sampleRate = context.sampleRate;
@@ -61,33 +171,14 @@ export async function startBassTest(
   await activateAudioSession();
   const context = new AudioContext();
   const source = context.createBufferSource({ pitchCorrection: true });
-  const lowShelf = context.createBiquadFilter();
-  const bandFilters = [60, 150, 400, 1000, 4000].map(() => context.createBiquadFilter());
-  const master = context.createGain();
+  const eq = createEqChain(context, 0.26);
   const buffer = createTrackBuffer(context, trackId);
   const now = context.currentTime;
 
   source.buffer = buffer;
   source.loop = true;
-  lowShelf.type = 'lowshelf';
-  lowShelf.frequency.value = 120;
-  lowShelf.gain.value = Math.min(14, 2 + settings.bassBoost * 0.09 + settings.subBass * 0.4);
-  bandFilters.forEach((filter, index) => {
-    filter.type = 'peaking';
-    filter.frequency.value = [60, 150, 400, 1000, 4000][index];
-    filter.Q.value = 0.85;
-    filter.gain.value = Math.max(-6, Math.min(6, settings.bands[index] ?? 0));
-  });
-  master.gain.value = 0.22;
-
-  source.connect(lowShelf);
-  let previous: typeof lowShelf = lowShelf;
-  bandFilters.forEach((filter) => {
-    previous.connect(filter);
-    previous = filter;
-  });
-  previous.connect(master);
-  master.connect(context.destination);
+  eq.update(settings);
+  source.connect(eq.input);
   source.start(now);
 
   let stopped = false;
@@ -96,10 +187,16 @@ export async function startBassTest(
     stopped = true;
     source.stop();
     source.disconnect();
+    eq.disconnect();
     void context.close();
   };
 
-  return { stop };
+  return {
+    stop,
+    update: eq.update,
+    seek: () => undefined,
+    getPosition: () => ({ currentTime: 0, duration: 0 }),
+  };
 }
 
 export async function startAudioFile(
@@ -108,11 +205,11 @@ export async function startAudioFile(
 ): Promise<BassTestSession> {
   await activateAudioSession();
   const context = new AudioContext();
-  const sourceUri = uri.startsWith('file://') ? uri.slice('file://'.length) : uri;
+  const sourceUri = uri;
   const source = context.context.createFileSource({
     source: sourceUri,
     loop: false,
-    volume: 1,
+    volume: 0.82,
     playbackRate: 1,
     preservesPitch: true,
   });
@@ -122,28 +219,20 @@ export async function startAudioFile(
     throw new Error('この音声形式を再生できません。MP3、M4A、WAVのいずれかを選択してください。');
   }
 
-  const lowShelf = context.context.createBiquadFilter({});
-  const bandFilters = [60, 150, 400, 1000, 4000].map(() => context.context.createBiquadFilter({}));
-  const master = context.context.createGain({ gain: 0.78 });
-  lowShelf.type = 'lowshelf';
-  lowShelf.frequency.value = 120;
-  lowShelf.gain.value = Math.min(14, 2 + settings.bassBoost * 0.09 + settings.subBass * 0.4);
-  bandFilters.forEach((filter, index) => {
-    filter.type = 'peaking';
-    filter.frequency.value = [60, 150, 400, 1000, 4000][index];
-    filter.Q.value = 0.85;
-    filter.gain.value = Math.max(-6, Math.min(6, settings.bands[index] ?? 0));
+  const eq = createRawEqChain(context, 0.56);
+  eq.update(settings);
+  source.connect(eq.input);
+  source.start(context.currentTime);
+
+  const getPosition = () => ({
+    currentTime: Math.max(0, source.currentTime),
+    duration: Math.max(0, source.duration),
   });
 
-  source.connect(lowShelf);
-  let previous = lowShelf;
-  bandFilters.forEach((filter) => {
-    previous.connect(filter);
-    previous = filter;
-  });
-  previous.connect(master);
-  master.connect(context.context.destination);
-  source.start(context.currentTime);
+  const seek = (seconds: number) => {
+    const { duration } = getPosition();
+    source.seekToTime(clamp(seconds, 0, duration));
+  };
 
   let stopped = false;
   const stop = () => {
@@ -151,8 +240,9 @@ export async function startAudioFile(
     stopped = true;
     source.stop(context.currentTime + 0.05);
     source.disconnect();
+    eq.disconnect();
     void context.close();
   };
 
-  return { stop };
+  return { stop, update: eq.update, seek, getPosition };
 }

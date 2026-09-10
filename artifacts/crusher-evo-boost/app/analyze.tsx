@@ -4,7 +4,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  clearAnalysisEvents,
   connectAnalysisPeripheral,
+  getAnalysisSnapshot,
   isBluetoothAnalysisAvailable,
   startBluetoothAnalysis,
   stopBluetoothAnalysis,
@@ -17,18 +19,17 @@ export default function AnalysisScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [events, setEvents] = useState<AnalysisEvent[]>([]);
-  const [running, setRunning] = useState(false);
+  const initialSnapshot = getAnalysisSnapshot();
+  const [events, setEvents] = useState<AnalysisEvent[]>(initialSnapshot.events);
+  const [running, setRunning] = useState(initialSnapshot.running);
   const available = isBluetoothAnalysisAvailable();
 
   useEffect(() => {
     const subscription = subscribeToAnalysis((event) => {
-      setEvents((current) => [...current, event].slice(-250));
+      setEvents(getAnalysisSnapshot().events);
+      setRunning(getAnalysisSnapshot().running);
     });
-    return () => {
-      void stopBluetoothAnalysis();
-      subscription.remove();
-    };
+    return () => subscription.remove();
   }, []);
 
   const peripherals = useMemo(
@@ -44,6 +45,7 @@ export default function AnalysisScreen() {
       );
       return;
     }
+    clearAnalysisEvents();
     setEvents([]);
     setRunning(true);
     await startBluetoothAnalysis();
