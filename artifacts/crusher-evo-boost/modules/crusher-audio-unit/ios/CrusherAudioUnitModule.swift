@@ -8,27 +8,46 @@ private let crusherAppGroup = "group.com.crusherevo.boost.audio"
 public final class CrusherAudioUnitModule: Module {
   private let bluetoothAnalyzer = BluetoothAnalyzer()
   private let audioSession = AVAudioSession.sharedInstance()
-  private var routeObserver: NSObjectProtocol?
+  private var audioSessionObservers: [NSObjectProtocol] = []
 
   public func definition() -> ModuleDefinition {
     Name("CrusherAudioUnit")
     Events("analysisEvent", "outputRouteChanged")
 
     OnCreate {
-      routeObserver = NotificationCenter.default.addObserver(
-        forName: AVAudioSession.routeChangeNotification,
-        object: audioSession,
-        queue: .main
-      ) { [weak self] _ in
-        self?.sendCurrentOutputRoute()
-      }
+      let notificationCenter = NotificationCenter.default
+      audioSessionObservers = [
+        notificationCenter.addObserver(
+          forName: AVAudioSession.routeChangeNotification,
+          object: audioSession,
+          queue: .main
+        ) { [weak self] _ in
+          self?.notifyOutputRouteChanged()
+        },
+        notificationCenter.addObserver(
+          forName: AVAudioSession.interruptionNotification,
+          object: audioSession,
+          queue: .main
+        ) { [weak self] _ in
+          self?.notifyOutputRouteChanged()
+        },
+        notificationCenter.addObserver(
+          forName: AVAudioSession.mediaServicesWereResetNotification,
+          object: audioSession,
+          queue: .main
+        ) { [weak self] _ in
+          self?.notifyOutputRouteChanged()
+        },
+      ]
+      sendCurrentOutputRoute()
     }
 
     OnDestroy {
-      if let routeObserver {
-        NotificationCenter.default.removeObserver(routeObserver)
-        self.routeObserver = nil
+      let notificationCenter = NotificationCenter.default
+      audioSessionObservers.forEach { observer in
+        notificationCenter.removeObserver(observer)
       }
+      audioSessionObservers.removeAll()
     }
 
     AsyncFunction("syncProfile") { (bassBoost: Double, subBass: Double, bands: [Double]) in
@@ -52,7 +71,9 @@ public final class CrusherAudioUnitModule: Module {
       do {
         try audioSession.setCategory(.playback, mode: .music, options: [.allowBluetooth, .allowBluetoothA2DP])
         try audioSession.setActive(true)
-        return currentOutputRoute()
+        let route = currentOutputRoute()
+        notifyOutputRouteChanged()
+        return route
       } catch {
         throw NSError(domain: "CrusherAudioUnit", code: 2, userInfo: [
           NSLocalizedDescriptionKey: "音声出力を有効化できませんでした: \(error.localizedDescription)",
@@ -92,15 +113,30 @@ public final class CrusherAudioUnitModule: Module {
   }
 
   private func currentOutputRoute() -> [String: Any] {
-    let output = audioSession.currentRoute.outputs.first
+    let outputs = audioSession.currentRoute.outputs
+    let bluetoothOutput = outputs.first { output in
+      isBluetoothPort(output.portType)
+    }
+    let output = bluetoothOutput ?? outputs.first
     let portType = output?.portType ?? .builtInSpeaker
-    let isBluetooth = portType == .bluetoothA2DP || portType == .bluetoothHFP || portType == .bluetoothLE
+    let isBluetooth = bluetoothOutput != nil
+    let name = bluetoothOutput?.portName ?? output?.portName ?? ""
     return [
-      "connected": output != nil,
+      "connected": !outputs.isEmpty,
       "isBluetooth": isBluetooth,
-      "name": output?.portName ?? (isBluetooth ? "" : "iPhoneスピーカー"),
+      "name": name.isEmpty && !isBluetooth ? "iPhoneスピーカー" : name,
       "type": portType.rawValue,
     ]
+  }
+
+  private func isBluetoothPort(_ portType: AVAudioSession.Port) -> Bool {
+    portType == .bluetoothA2DP || portType == .bluetoothHFP || portType == .bluetoothLE
+  }
+
+  private func notifyOutputRouteChanged() {
+    DispatchQueue.main.async { [weak self] in
+      self?.sendCurrentOutputRoute()
+    }
   }
 
   private func sendCurrentOutputRoute() {
@@ -170,10 +206,14 @@ private final class BluetoothAnalyzer: NSObject, CBCentralManagerDelegate, CBPer
     rssi RSSI: NSNumber
   ) {
     peripherals[peripheral.identifier] = peripheral
-    let name = peripheral.name ?? advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? "Unknown"
+    let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+    let name = advertisedName?.isEmpty == false
+      ? advertisedName!
+      : (peripheral.name ?? "Unknown")
     emit(type: "peripheral", id: peripheral.identifier.uuidString, name: name, rssi: RSSI.intValue)
 
-    if name.localizedCaseInsensitiveContains("crusher") || name.localizedCaseInsensitiveContains("s6evw") {
+    let normalizedName = name.replacingOccurrences(of: " ", with: "").lowercased()
+    if normalizedName.contains("crusher") || normalizedName.contains("s6evw") {
       peripheral.delegate = self
       central.stopScan()
       emit(type: "status", message: "\(name)を検出しました。サービスを確認しています。")
