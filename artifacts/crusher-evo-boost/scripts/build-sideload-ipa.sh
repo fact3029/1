@@ -52,6 +52,29 @@ fs.writeFileSync(path, `${JSON.stringify(properties, null, 2)}\n`);
 NODE
 export EXPO_USE_PRECOMPILED_MODULES=0
 
+echo "==> Relaxing Swift concurrency checks for Expo source pods"
+node <<'NODE'
+const fs = require('node:fs');
+const path = 'ios/Podfile';
+const source = fs.readFileSync(path, 'utf8');
+const marker = `    react_native_post_install(
+      installer,
+      config[:reactNativePath],
+      :mac_catalyst_enabled => false,
+      :ccache_enabled => ccache_enabled?(podfile_properties),
+    )`;
+const addition = `${marker}
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |build_configuration|
+        build_configuration.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
+      end
+    end`;
+if (source.split(marker).length !== 2) {
+  throw new Error('Expected exactly one React Native post_install block in ios/Podfile.');
+}
+fs.writeFileSync(path, source.replace(marker, addition));
+NODE
+
 echo "==> Applying the Expo Modules JSI Xcode 26 compatibility patch"
 EXPO_JSI_HEADER="$(
   find "${APP_ROOT}/../../node_modules/.pnpm" \
