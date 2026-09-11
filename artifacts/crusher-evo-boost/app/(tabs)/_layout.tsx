@@ -39,6 +39,12 @@ function NativeTabLayout() {
         />
         <NativeTabs.Trigger.Label>Guide</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="cautions">
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'exclamationmark.triangle', selected: 'exclamationmark.triangle.fill' }}
+        />
+        <NativeTabs.Trigger.Label>注意事項</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
@@ -126,6 +132,18 @@ function ClassicTabLayout() {
               <SymbolView name="info.circle" tintColor={color} size={24} />
             ) : (
               <Feather name="info" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="cautions"
+        options={{
+          title: '注意事項',
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="exclamationmark.triangle" tintColor={color} size={23} />
+            ) : (
+              <Feather name="alert-triangle" size={22} color={color} />
             ),
         }}
       />
