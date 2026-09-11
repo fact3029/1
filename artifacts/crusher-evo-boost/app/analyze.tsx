@@ -18,6 +18,12 @@ import {
 } from '@/audio/bluetoothAnalysis';
 import { useColors } from '@/hooks/useColors';
 
+const CONTROL_SERVICE_IDS = new Set([
+  'feed',
+  'fdb3',
+  '00001100-d102-11e1-9b23-00025b00a5a5',
+]);
+
 export default function AnalysisScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -86,9 +92,28 @@ export default function AnalysisScreen() {
       characteristics: characteristics.length,
       values: events.filter((event) => event.type === 'value').length,
       writable: characteristics.filter((event) => event.properties?.includes('write')).length,
+      notifyValues: events.filter((event) => event.type === 'value' && event.source === 'notify').length,
+      controlCandidates: characteristics.filter((event) => isControlService(event.serviceUuid)).length,
     }),
     [events, peripherals.length, services.length, characteristics],
   );
+  const controlCharacteristics = useMemo(
+    () => characteristics.filter((event) => isControlService(event.serviceUuid)),
+    [characteristics],
+  );
+  const deviceFacts = useMemo(() => {
+    const latest = (serviceUuid: string, uuid: string) =>
+      [...events].reverse().find((event) => event.type === 'value' && event.serviceUuid === serviceUuid && event.uuid === uuid);
+    const model = decodeHexText(latest('180A', '2A24')?.hex);
+    const firmware = decodeHexText(latest('180A', '2A26')?.hex);
+    const batteryHex = latest('180F', '2A19')?.hex?.replace(/\s/g, '');
+    const battery = batteryHex ? Number.parseInt(batteryHex, 16) : NaN;
+    return [
+      { label: 'モデル', value: model || '—' },
+      { label: 'Firmware', value: firmware || '—' },
+      { label: 'Battery', value: Number.isFinite(battery) ? `${battery}%` : '—' },
+    ];
+  }, [events]);
 
   const start = async () => {
     if (!available) {
@@ -267,10 +292,42 @@ export default function AnalysisScreen() {
               <SummaryItem label="Characteristic" value={summary.characteristics} colors={colors} />
               <SummaryItem label="読み取り値" value={summary.values} colors={colors} />
               <SummaryItem label="書き込み候補" value={summary.writable} colors={colors} />
+              <SummaryItem label="notify値" value={summary.notifyValues} colors={colors} />
+              <SummaryItem label="制御候補" value={summary.controlCandidates} colors={colors} />
+            </View>
+            <View style={styles.factsRow}>
+              {deviceFacts.map((fact) => (
+                <View key={fact.label} style={[styles.fact, { backgroundColor: colors.background }]}>
+                  <Text style={[styles.factLabel, { color: colors.mutedForeground }]}>{fact.label}</Text>
+                  <Text style={[styles.factValue, { color: colors.foreground }]}>{fact.value}</Text>
+                </View>
+              ))}
             </View>
             <Text style={[styles.summaryNote, { color: colors.mutedForeground }]}>
-              「書き込み候補」はwrite権限が見えるだけで、EQ設定用とは判定できません。
+              「制御候補」はFEED・FDB3・Crusher独自サービスに属するCharacteristicです。EQ用と確定したものではありません。
             </Text>
+          </View>
+        ) : null}
+
+        {controlCharacteristics.length > 0 ? (
+          <View style={[styles.controlSummary, { backgroundColor: colors.accent, borderColor: colors.border }]}>
+            <View style={styles.logHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>本体制御候補</Text>
+              <Text style={[styles.count, { color: colors.mutedForeground }]}>未判定</Text>
+            </View>
+            <Text style={[styles.helper, { color: colors.mutedForeground }]}>
+              ここが公式アプリのEQ変更通信と一致するかを、変更前後のログで比較します。候補を見つけただけではDSP制御とは判定しません。
+            </Text>
+            {controlCharacteristics.map((characteristic) => (
+              <View key={`${characteristic.serviceUuid}:${characteristic.uuid}`} style={styles.controlRow}>
+                <Text style={[styles.controlUuid, { color: colors.foreground }]}>
+                  {characteristic.serviceUuid} / {characteristic.uuid}
+                </Text>
+                <Text style={[styles.controlProperties, { color: colors.mutedForeground }]}>
+                  {characteristic.properties || '—'}{characteristic.value?.hex ? ` · ${characteristic.value.hex}` : ''}
+                </Text>
+              </View>
+            ))}
           </View>
         ) : null}
 
@@ -281,7 +338,7 @@ export default function AnalysisScreen() {
               <Text style={[styles.count, { color: colors.mutedForeground }]}>実機操作</Text>
             </View>
             <Text style={[styles.helper, { color: colors.mutedForeground }]}>
-              read・notify・writeをCharacteristic単位で実行できます。payloadは自動送信せず、入力した値だけを送ります。
+              FEED・FDB3・Crusher独自サービスのnotifyは自動購読します。writeは自動送信せず、入力した値だけを送ります。
             </Text>
             {characteristics.map((characteristic) => {
               const serviceUuid = characteristic.serviceUuid || '';
@@ -293,7 +350,12 @@ export default function AnalysisScreen() {
               const canWrite = properties.includes('write') || properties.includes('writeWithoutResponse');
               return (
                 <View key={key} style={[styles.characteristicCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Text style={[styles.characteristicTitle, { color: colors.foreground }]}>{uuid}</Text>
+                   <View style={styles.characteristicTitleRow}>
+                     <Text style={[styles.characteristicTitle, { color: colors.foreground }]}>{uuid}</Text>
+                     {isControlService(serviceUuid) ? (
+                       <Text style={[styles.candidatePill, { color: colors.primary }]}>CONTROL CANDIDATE</Text>
+                     ) : null}
+                   </View>
                   <Text style={[styles.characteristicMeta, { color: colors.mutedForeground }]}>
                     {serviceUuid} · {characteristic.properties || '—'}
                   </Text>
@@ -402,13 +464,28 @@ function formatEvent(event: AnalysisEvent): string {
   if (event.type === 'characteristic') {
     return `[characteristic] ${event.serviceUuid || '—'} / ${event.uuid} · ${event.properties || '—'}`;
   }
-  if (event.type === 'value') return `[${event.source || 'read'}] ${event.uuid} · ${event.hex || '(empty)'} (${event.length ?? 0} bytes)`;
-  if (event.type === 'operation') return `[${event.operation || 'operation'}] ${event.uuid || ''} · ${event.message || ''}`;
-  if (event.type === 'writeAck') return `[write ack] ${event.uuid || ''} · ${event.message || ''}`;
-  if (event.type === 'writeError') return `[write error] ${event.uuid || ''} · ${event.message || ''}`;
-  if (event.type === 'notifyState') return `[notify] ${event.uuid || ''} · ${event.enabled ? 'on' : 'off'}`;
+  if (event.type === 'value') return `[${event.source || 'read'}] ${event.serviceUuid || '—'} / ${event.uuid} · ${event.hex || '(empty)'} (${event.length ?? 0} bytes)`;
+  if (event.type === 'operation') return `[${event.operation || 'operation'}] ${event.serviceUuid || '—'} / ${event.uuid || ''} · ${event.message || ''}`;
+  if (event.type === 'writeAck') return `[write ack] ${event.serviceUuid || '—'} / ${event.uuid || ''} · ${event.message || ''}`;
+  if (event.type === 'writeError') return `[write error] ${event.serviceUuid || '—'} / ${event.uuid || ''} · ${event.message || ''}`;
+  if (event.type === 'notifyState') return `[notify] ${event.serviceUuid || '—'} / ${event.uuid || ''} · ${event.enabled ? 'on' : 'off'}`;
   const timestamp = event.capturedAt ? ` ${formatTimestamp(event.capturedAt)}` : '';
   return `[${event.type}]${timestamp} ${event.message || event.name || ''}`;
+}
+
+function isControlService(serviceUuid?: string) {
+  return Boolean(serviceUuid && CONTROL_SERVICE_IDS.has(serviceUuid.toLowerCase()));
+}
+
+function decodeHexText(hex?: string) {
+  if (!hex) return '';
+  const bytes = hex
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((value) => Number.parseInt(value, 16))
+    .filter((value) => Number.isFinite(value));
+  const text = String.fromCharCode(...bytes);
+  return bytes.length > 0 && [...text].every((character) => character >= ' ' && character <= '~') ? text : '';
 }
 
 function formatTimestamp(timestamp: number) {
@@ -444,11 +521,21 @@ const styles = StyleSheet.create({
   summaryValue: { fontFamily: 'Inter_700Bold', fontSize: 18 },
   summaryLabel: { fontFamily: 'Inter_400Regular', fontSize: 9 },
   summaryNote: { fontFamily: 'Inter_400Regular', fontSize: 10, lineHeight: 15 },
+  factsRow: { flexDirection: 'row', gap: 7 },
+  fact: { flex: 1, minHeight: 43, borderRadius: 10, padding: 8, gap: 2 },
+  factLabel: { fontFamily: 'Inter_400Regular', fontSize: 9 },
+  factValue: { fontFamily: 'Inter_700Bold', fontSize: 12 },
+  controlSummary: { borderRadius: 16, borderWidth: 1, padding: 12, gap: 8 },
+  controlRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(128,128,128,0.25)', paddingTop: 7, gap: 2 },
+  controlUuid: { fontFamily: 'Inter_600SemiBold', fontSize: 10 },
+  controlProperties: { fontFamily: 'Inter_400Regular', fontSize: 9, lineHeight: 14 },
   section: { gap: 8, marginTop: 4 },
   sectionTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   helper: { fontFamily: 'Inter_400Regular', fontSize: 10, lineHeight: 15 },
   characteristicCard: { borderRadius: 15, borderWidth: 1, padding: 11, gap: 7 },
-  characteristicTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
+  characteristicTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  characteristicTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 11, flex: 1 },
+  candidatePill: { fontFamily: 'Inter_700Bold', fontSize: 8, letterSpacing: 0.4 },
   characteristicMeta: { fontFamily: 'Inter_400Regular', fontSize: 9, lineHeight: 14 },
   valueText: { fontFamily: 'Inter_500Medium', fontSize: 10, lineHeight: 15 },
   operationRow: { flexDirection: 'row', gap: 7 },

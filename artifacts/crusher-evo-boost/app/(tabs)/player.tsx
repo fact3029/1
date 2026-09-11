@@ -7,7 +7,7 @@ import { activateAudioSession, subscribeToOutputRoute, type OutputRoute } from '
 import { useProfiles } from '@/context/ProfileContext';
 import { useColors } from '@/hooks/useColors';
 
-const BAND_LABELS = ['60', '150', '400', '1K', '4K'];
+const BAND_LABELS = ['60', '150', '400', '2K', '12K'];
 
 export default function PlayerScreen() {
   const colors = useColors();

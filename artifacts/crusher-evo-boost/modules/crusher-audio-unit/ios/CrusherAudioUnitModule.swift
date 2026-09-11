@@ -261,8 +261,7 @@ private final class BluetoothAnalyzer: NSObject, CBCentralManagerDelegate, CBPer
 
     let normalizedName = name.replacingOccurrences(of: " ", with: "").lowercased()
     if normalizedName.contains("crusher") || normalizedName.contains("s6evw") {
-      emit(type: "status", message: "\(name)を検出しました。サービスを確認しています。")
-      connect(peripheral)
+      emit(type: "status", message: "\(name)を検出しました。機器行をタップして接続してください。")
     }
   }
 
@@ -313,6 +312,16 @@ private final class BluetoothAnalyzer: NSObject, CBCentralManagerDelegate, CBPer
         uuid: characteristic.uuid.uuidString,
         properties: propertyNames(characteristic.properties)
       )
+      if shouldAutoSubscribe(service: service, characteristic: characteristic) {
+        emit(type: "operation", [
+          "operation": "notify",
+          "peripheralId": peripheral.identifier.uuidString,
+          "serviceUuid": service.uuid.uuidString,
+          "uuid": characteristic.uuid.uuidString,
+          "message": "制御候補のnotifyを自動購読しました。",
+        ])
+        peripheral.setNotifyValue(true, for: characteristic)
+      }
       if characteristic.properties.contains(.read) {
         peripheral.readValue(for: characteristic)
       }
@@ -497,6 +506,16 @@ private final class BluetoothAnalyzer: NSObject, CBCentralManagerDelegate, CBPer
     if properties.contains(.notify) { names.append("notify") }
     if properties.contains(.indicate) { names.append("indicate") }
     return names.joined(separator: ",")
+  }
+
+  private func shouldAutoSubscribe(service: CBService, characteristic: CBCharacteristic) -> Bool {
+    guard characteristic.properties.contains(.notify) || characteristic.properties.contains(.indicate) else {
+      return false
+    }
+    let serviceUuid = service.uuid.uuidString.lowercased()
+    return serviceUuid == "feed"
+      || serviceUuid == "fdb3"
+      || serviceUuid == "00001100-d102-11e1-9b23-00025b00a5a5"
   }
 
   private func emit(type: String, _ values: [String: Any?] = [:]) {

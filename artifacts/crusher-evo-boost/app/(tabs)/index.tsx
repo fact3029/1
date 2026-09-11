@@ -10,7 +10,7 @@ import { activateAudioSession, openBluetoothSettings, subscribeToOutputRoute, ty
 import { useProfiles } from '@/context/ProfileContext';
 import { useColors } from '@/hooks/useColors';
 
-const BAND_LABELS = ['60', '150', '400', '1K', '4K'];
+const BAND_LABELS = ['60', '150', '400', '2K', '12K'];
 
 export default function HomeScreen() {
   const colors = useColors();
@@ -157,7 +157,7 @@ export default function HomeScreen() {
       <View style={styles.sectionHeading}>
         <View>
           <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>FINE TUNE</Text>
-          <Text style={[styles.profileTitle, { color: colors.foreground }]}>5-band EQ</Text>
+          <Text style={[styles.profileTitle, { color: colors.foreground }]}>5-band EQ · 60Hz–12kHz</Text>
         </View>
         <Text style={[styles.unit, { color: colors.mutedForeground }]}>dB</Text>
       </View>
@@ -172,7 +172,7 @@ export default function HomeScreen() {
                   accessibilityRole="button"
                   onPress={() => {
                     const next = [...activeProfile.bands];
-                    next[index] = Math.max(-6, value - 1);
+                    next[index] = Math.max(-12, value - 1);
                     updateActive({ bands: next });
                   }}
                   style={({ pressed }) => [styles.smallButton, { borderColor: colors.border, opacity: pressed ? 0.5 : 1 }]}
@@ -187,7 +187,7 @@ export default function HomeScreen() {
                   accessibilityRole="button"
                   onPress={() => {
                     const next = [...activeProfile.bands];
-                    next[index] = Math.min(6, value + 1);
+                    next[index] = Math.min(12, value + 1);
                     updateActive({ bands: next });
                   }}
                   style={({ pressed }) => [styles.smallButton, { borderColor: colors.border, opacity: pressed ? 0.5 : 1 }]}

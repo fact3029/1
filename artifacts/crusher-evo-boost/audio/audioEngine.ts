@@ -1,5 +1,6 @@
 import { AudioContext } from 'react-native-audio-api';
 import { activateAudioSession } from '@/audio/outputRoute';
+import { EQ_BAND_FREQUENCIES } from '@/audio/eqProfiles';
 
 export type BassTestSettings = {
   bassBoost: number;
@@ -27,7 +28,15 @@ export type BassTestSession = {
   getPosition: () => { currentTime: number; duration: number };
 };
 
-const EQ_FREQUENCIES = [60, 150, 400, 1000, 4000];
+let activePlaybackStop: (() => void) | null = null;
+
+async function stopActivePlayback() {
+  const stop = activePlaybackStop;
+  activePlaybackStop = null;
+  stop?.();
+  // Give the native graph one turn to release before a new graph starts.
+  await new Promise<void>((resolve) => setTimeout(resolve, 40));
+}
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -61,7 +70,7 @@ function createSoftClipCurve() {
 function createEqChain(context: AudioContext, masterGain: number) {
   const graph = context;
   const lowShelf = graph.createBiquadFilter();
-  const bandFilters = EQ_FREQUENCIES.map(() => graph.createBiquadFilter());
+  const bandFilters = EQ_BAND_FREQUENCIES.map(() => graph.createBiquadFilter());
   const master = graph.createGain();
   const safety = graph.createWaveShaper();
 
@@ -73,12 +82,12 @@ function createEqChain(context: AudioContext, masterGain: number) {
 
   const update = (settings: BassTestSettings) => {
     const bassBoost = settings.bassEnabled === false ? 0 : settings.bassBoost;
-    lowShelf.gain.value = clamp(bassBoost * 0.12 + settings.subBass * 0.55, -2, 12);
+    lowShelf.gain.value = clamp(bassBoost * 0.22 + settings.subBass * 1.0, -6, 18);
     bandFilters.forEach((filter, index) => {
       filter.type = 'peaking';
-      filter.frequency.value = EQ_FREQUENCIES[index];
-      filter.Q.value = 0.85;
-      filter.gain.value = clamp(settings.bands[index] ?? 0, -6, 6);
+      filter.frequency.value = EQ_BAND_FREQUENCIES[index];
+      filter.Q.value = 0.72;
+      filter.gain.value = clamp(settings.bands[index] ?? 0, -12, 12);
     });
   };
 
@@ -106,7 +115,7 @@ function createEqChain(context: AudioContext, masterGain: number) {
 function createRawEqChain(context: AudioContext, masterGain: number) {
   const graph = context.context;
   const lowShelf = graph.createBiquadFilter({});
-  const bandFilters = EQ_FREQUENCIES.map(() => graph.createBiquadFilter({}));
+  const bandFilters = EQ_BAND_FREQUENCIES.map(() => graph.createBiquadFilter({}));
   const master = graph.createGain({});
   const safety = graph.createWaveShaper({});
 
@@ -118,12 +127,12 @@ function createRawEqChain(context: AudioContext, masterGain: number) {
 
   const update = (settings: BassTestSettings) => {
     const bassBoost = settings.bassEnabled === false ? 0 : settings.bassBoost;
-    lowShelf.gain.value = clamp(bassBoost * 0.12 + settings.subBass * 0.55, -2, 12);
+    lowShelf.gain.value = clamp(bassBoost * 0.22 + settings.subBass * 1.0, -6, 18);
     bandFilters.forEach((filter, index) => {
       filter.type = 'peaking';
-      filter.frequency.value = EQ_FREQUENCIES[index];
-      filter.Q.value = 0.85;
-      filter.gain.value = clamp(settings.bands[index] ?? 0, -6, 6);
+      filter.frequency.value = EQ_BAND_FREQUENCIES[index];
+      filter.Q.value = 0.72;
+      filter.gain.value = clamp(settings.bands[index] ?? 0, -12, 12);
     });
   };
 
@@ -183,10 +192,11 @@ export async function startBassTest(
   settings: BassTestSettings,
   trackId: string = BUILT_IN_TRACKS[0].id,
 ): Promise<BassTestSession> {
+  await stopActivePlayback();
   await activateAudioSession();
   const context = new AudioContext();
   await context.resume();
-  const eq = createEqChain(context, 0.26);
+  const eq = createEqChain(context, 0.68);
   const buffer = createTrackBuffer(context, trackId);
   const duration = 12;
   let startedAt = context.currentTime;
@@ -210,7 +220,9 @@ export async function startBassTest(
     source.disconnect();
     eq.disconnect();
     void context.close();
+    if (activePlaybackStop === stop) activePlaybackStop = null;
   };
+  activePlaybackStop = stop;
 
   return {
     stop,
@@ -219,7 +231,7 @@ export async function startBassTest(
       if (stopped) return;
       const nextPosition = clamp(seconds, 0, duration);
       try {
-        source.stop();
+        source.stop(context.currentTime);
       } catch {
         return;
       }
@@ -242,6 +254,7 @@ export async function startAudioFile(
   uri: string,
   settings: BassTestSettings,
 ): Promise<BassTestSession> {
+  await stopActivePlayback();
   await activateAudioSession();
   const context = new AudioContext();
   await context.resume();
@@ -262,7 +275,7 @@ export async function startAudioFile(
     throw new Error('音声をデコードできませんでした。このIPAで再生できるMP3、M4A、またはWAVを選択してください。');
   }
 
-  const eq = createRawEqChain(context, 0.56);
+  const eq = createRawEqChain(context, 0.72);
   eq.update(settings);
   source.connect(eq.input);
   source.start(context.currentTime + 0.02);
@@ -289,7 +302,9 @@ export async function startAudioFile(
     source.disconnect();
     eq.disconnect();
     void context.close();
+    if (activePlaybackStop === stop) activePlaybackStop = null;
   };
 
+  activePlaybackStop = stop;
   return { stop, update: eq.update, seek, getPosition };
 }

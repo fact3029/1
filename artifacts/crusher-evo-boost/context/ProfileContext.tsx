@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { DEFAULT_PROFILE_VALUES } from '@/audio/eqProfiles';
+import { DEFAULT_PROFILE_VALUES, EQ_BAND_FREQUENCIES } from '@/audio/eqProfiles';
 import { DEFAULT_OUTPUT_MODE, type OutputModeId } from '@/audio/outputModes';
 import { syncProfileToOutput } from '@/audio/outputRouting';
 
@@ -18,6 +18,14 @@ export type EqProfile = {
 const STORAGE_KEY = '@crusher-evo-boost/profiles';
 const ACTIVE_KEY = '@crusher-evo-boost/active-profile';
 const OUTPUT_MODE_KEY = '@crusher-evo-boost/output-mode';
+
+function normalizeBands(bands: unknown): number[] {
+  const values = Array.isArray(bands) ? bands : [];
+  return EQ_BAND_FREQUENCIES.map((_, index) => {
+    const value = Number(values[index]);
+    return Number.isFinite(value) ? Math.max(-12, Math.min(12, value)) : 0;
+  });
+}
 
 export const DEFAULT_PROFILES: EqProfile[] = [
   {
@@ -78,7 +86,13 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         ]);
         if (storedProfiles) {
           const parsed = JSON.parse(storedProfiles) as EqProfile[];
-          setProfiles(parsed.map((profile) => ({ ...profile, bassEnabled: profile.bassEnabled !== false })));
+           setProfiles(
+             parsed.map((profile) => ({
+               ...profile,
+               bassEnabled: profile.bassEnabled !== false,
+               bands: normalizeBands(profile.bands),
+             })),
+           );
         }
         if (storedActive) setActiveId(storedActive);
         if (storedOutputMode) setOutputMode(storedOutputMode as OutputModeId);
