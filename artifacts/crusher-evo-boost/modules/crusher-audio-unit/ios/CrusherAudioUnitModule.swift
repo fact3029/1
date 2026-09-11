@@ -513,9 +513,9 @@ private final class BluetoothAnalyzer: NSObject, CBCentralManagerDelegate, CBPer
       return false
     }
     let serviceUuid = service.uuid.uuidString.lowercased()
-    return serviceUuid == "feed"
-      || serviceUuid == "fdb3"
-      || serviceUuid == "00001100-d102-11e1-9b23-00025b00a5a5"
+    return serviceUuid == "feed" ||
+      serviceUuid == "fdb3" ||
+      serviceUuid == "00001100-d102-11e1-9b23-00025b00a5a5"
   }
 
   private func emit(type: String, _ values: [String: Any?] = [:]) {
