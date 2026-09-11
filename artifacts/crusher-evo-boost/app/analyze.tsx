@@ -1,16 +1,19 @@
 import { Feather } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   clearAnalysisEvents,
   connectAnalysisPeripheral,
   getAnalysisSnapshot,
   isBluetoothAnalysisAvailable,
+  readAnalysisCharacteristic,
+  setAnalysisNotify,
   startBluetoothAnalysis,
   stopBluetoothAnalysis,
   subscribeToAnalysis,
+  writeAnalysisCharacteristic,
   type AnalysisEvent,
 } from '@/audio/bluetoothAnalysis';
 import { useColors } from '@/hooks/useColors';
@@ -22,6 +25,9 @@ export default function AnalysisScreen() {
   const initialSnapshot = getAnalysisSnapshot();
   const [events, setEvents] = useState<AnalysisEvent[]>(initialSnapshot.events);
   const [running, setRunning] = useState(initialSnapshot.running);
+  const [payloads, setPayloads] = useState<Record<string, string>>({});
+  const [notifyStates, setNotifyStates] = useState<Record<string, boolean>>({});
+  const [busyKey, setBusyKey] = useState<string | null>(null);
   const available = isBluetoothAnalysisAvailable();
 
   useEffect(() => {
@@ -36,16 +42,52 @@ export default function AnalysisScreen() {
     () => events.filter((event) => event.type === 'peripheral' && event.id).filter((event, index, all) => all.findIndex((item) => item.id === event.id) === index),
     [events],
   );
+  const connectedDeviceId = useMemo(
+    () => [...events].reverse().find((event) => event.type === 'connected' && event.id)?.id ?? peripherals[0]?.id ?? '',
+    [events, peripherals],
+  );
+  const services = useMemo(
+    () =>
+      events
+        .filter((event) => event.type === 'service' && event.uuid)
+        .filter((event, index, all) => all.findIndex((item) => item.uuid === event.uuid && item.peripheralId === event.peripheralId) === index),
+    [events],
+  );
+  const characteristics = useMemo(() => {
+    const rows = events.filter((event) => event.type === 'characteristic' && event.uuid && event.serviceUuid);
+    return rows
+      .filter(
+        (event, index, all) =>
+          all.findIndex(
+            (item) =>
+              item.uuid === event.uuid &&
+              item.serviceUuid === event.serviceUuid &&
+              item.peripheralId === event.peripheralId,
+          ) === index,
+      )
+      .map((event) => {
+        const value = [...events]
+          .reverse()
+          .find(
+            (item) =>
+              item.type === 'value' &&
+              item.uuid === event.uuid &&
+              item.serviceUuid === event.serviceUuid &&
+              item.peripheralId === event.peripheralId,
+          );
+        return { ...event, value };
+      });
+  }, [events]);
   const summary = useMemo(
     () => ({
       devices: peripherals.length,
-      connected: events.filter((event) => event.type === 'connected').length,
-      services: events.filter((event) => event.type === 'service').length,
-      characteristics: events.filter((event) => event.type === 'characteristic').length,
+      connected: new Set(events.filter((event) => event.type === 'connected').map((event) => event.id)).size,
+      services: services.length,
+      characteristics: characteristics.length,
       values: events.filter((event) => event.type === 'value').length,
-      writable: events.filter((event) => event.type === 'characteristic' && event.properties?.includes('write')).length,
+      writable: characteristics.filter((event) => event.properties?.includes('write')).length,
     }),
-    [events, peripherals.length],
+    [events, peripherals.length, services.length, characteristics],
   );
 
   const start = async () => {
@@ -90,6 +132,85 @@ export default function AnalysisScreen() {
     });
   };
 
+  const readCharacteristic = async (serviceUuid: string, characteristicUuid: string, peripheralId?: string) => {
+    const identifier = peripheralId || connectedDeviceId;
+    if (!identifier) {
+      Alert.alert('接続先がありません', 'Crusher EVOを接続してから実行してください。');
+      return;
+    }
+    const key = `${serviceUuid}:${characteristicUuid}`;
+    setBusyKey(key);
+    try {
+      const ok = await readAnalysisCharacteristic(identifier, serviceUuid, characteristicUuid);
+      if (!ok) Alert.alert('実行できません', 'ネイティブBluetoothモジュールが利用できません。');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const toggleNotify = async (serviceUuid: string, characteristicUuid: string, peripheralId?: string) => {
+    const identifier = peripheralId || connectedDeviceId;
+    if (!identifier) {
+      Alert.alert('接続先がありません', 'Crusher EVOを接続してから実行してください。');
+      return;
+    }
+    const key = `${serviceUuid}:${characteristicUuid}`;
+    const enabled = !notifyStates[key];
+    setBusyKey(key);
+    try {
+      const ok = await setAnalysisNotify(identifier, serviceUuid, characteristicUuid, enabled);
+      if (ok) setNotifyStates((current) => ({ ...current, [key]: enabled }));
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const writeCharacteristic = async (serviceUuid: string, characteristicUuid: string, peripheralId?: string) => {
+    const identifier = peripheralId || connectedDeviceId;
+    const key = `${serviceUuid}:${characteristicUuid}`;
+    const hex = payloads[key]?.trim() || '';
+    if (!identifier) {
+      Alert.alert('接続先がありません', 'Crusher EVOを接続してから実行してください。');
+      return;
+    }
+    if (!/^(?:[0-9a-fA-F]{2})(?:[\s:-]*[0-9a-fA-F]{2})*$/.test(hex)) {
+      Alert.alert('payloadを確認してください', 'スペース区切りの16進数を入力してください。例: 01 00 FF');
+      return;
+    }
+    const characteristic = characteristics.find(
+      (event) => event.serviceUuid === serviceUuid && event.uuid === characteristicUuid,
+    );
+    const properties = characteristic?.properties?.split(',') ?? [];
+    const withoutResponse = properties.includes('writeWithoutResponse') && !properties.includes('write');
+    Alert.alert(
+      'BLE書き込みを実行します',
+      `${serviceUuid} / ${characteristicUuid}\n${hex}\n\n本体動作が変わる可能性があります。送信しますか？`,
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '送信',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setBusyKey(key);
+              try {
+                await writeAnalysisCharacteristic(
+                  identifier,
+                  serviceUuid,
+                  characteristicUuid,
+                  hex,
+                  Boolean(withoutResponse),
+                );
+              } finally {
+                setBusyKey(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <>
       <Stack.Screen options={{ title: '解析モード', headerBackTitle: 'Home' }} />
@@ -104,13 +225,13 @@ export default function AnalysisScreen() {
         <Text style={[styles.eyebrow, { color: colors.primary }]}>BLUETOOTH LAB</Text>
         <Text style={[styles.title, { color: colors.foreground }]}>Crusher EVOを解析</Text>
         <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-          公式アプリと切断した状態で、公開されているBluetooth LEサービスと読み取り可能な値を確認します。
+          公式アプリと切断した状態で、Bluetooth LEの構成を確認し、接続中のCharacteristicを実際に操作します。
         </Text>
 
         <View style={[styles.warning, { backgroundColor: colors.accent }]}>
           <Feather name="shield" size={16} color={colors.primary} />
           <Text style={[styles.warningText, { color: colors.mutedForeground }]}>
-            読み取り専用です。検出・接続・サービス・Characteristic・読み取り値を記録します。EQ値の書き込みや、公式アプリの通信の盗聴は行いません。
+            スキャンとreadは自動で行います。writeは自動送信せず、GATTワークベンチでpayloadを入力して確認後に実行します。公式アプリの通信は盗聴しません。
           </Text>
         </View>
 
@@ -150,6 +271,81 @@ export default function AnalysisScreen() {
             <Text style={[styles.summaryNote, { color: colors.mutedForeground }]}>
               「書き込み候補」はwrite権限が見えるだけで、EQ設定用とは判定できません。
             </Text>
+          </View>
+        ) : null}
+
+        {characteristics.length > 0 ? (
+          <View style={styles.section}>
+            <View style={styles.logHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>GATTワークベンチ</Text>
+              <Text style={[styles.count, { color: colors.mutedForeground }]}>実機操作</Text>
+            </View>
+            <Text style={[styles.helper, { color: colors.mutedForeground }]}>
+              read・notify・writeをCharacteristic単位で実行できます。payloadは自動送信せず、入力した値だけを送ります。
+            </Text>
+            {characteristics.map((characteristic) => {
+              const serviceUuid = characteristic.serviceUuid || '';
+              const uuid = characteristic.uuid || '';
+              const key = `${serviceUuid}:${uuid}`;
+              const properties = characteristic.properties?.split(',') ?? [];
+              const canRead = properties.includes('read');
+              const canNotify = properties.includes('notify') || properties.includes('indicate');
+              const canWrite = properties.includes('write') || properties.includes('writeWithoutResponse');
+              return (
+                <View key={key} style={[styles.characteristicCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.characteristicTitle, { color: colors.foreground }]}>{uuid}</Text>
+                  <Text style={[styles.characteristicMeta, { color: colors.mutedForeground }]}>
+                    {serviceUuid} · {characteristic.properties || '—'}
+                  </Text>
+                  {characteristic.value ? (
+                    <Text style={[styles.valueText, { color: colors.foreground }]} numberOfLines={2}>
+                      {characteristic.value.hex || '(empty)'} · {characteristic.value.length ?? 0} bytes · {characteristic.value.source || 'read'}
+                    </Text>
+                  ) : null}
+                  <View style={styles.operationRow}>
+                    {canRead ? (
+                      <Pressable
+                        onPress={() => void readCharacteristic(serviceUuid, uuid, characteristic.peripheralId)}
+                        disabled={busyKey === key}
+                        style={[styles.operationButton, { borderColor: colors.border, opacity: busyKey === key ? 0.5 : 1 }]}
+                      >
+                        <Text style={[styles.operationLabel, { color: colors.foreground }]}>READ</Text>
+                      </Pressable>
+                    ) : null}
+                    {canNotify ? (
+                      <Pressable
+                        onPress={() => void toggleNotify(serviceUuid, uuid, characteristic.peripheralId)}
+                        disabled={busyKey === key}
+                        style={[styles.operationButton, { borderColor: colors.border, opacity: busyKey === key ? 0.5 : 1 }]}
+                      >
+                        <Text style={[styles.operationLabel, { color: colors.foreground }]}>
+                          {notifyStates[key] ? 'STOP NOTIFY' : 'NOTIFY'}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  {canWrite ? (
+                    <View style={styles.writeRow}>
+                      <TextInput
+                        value={payloads[key] || ''}
+                        onChangeText={(value) => setPayloads((current) => ({ ...current, [key]: value }))}
+                        placeholder="例: 01 00 FF"
+                        placeholderTextColor={colors.mutedForeground}
+                        autoCapitalize="characters"
+                        style={[styles.payloadInput, { color: colors.foreground, borderColor: colors.border }]}
+                      />
+                      <Pressable
+                        onPress={() => void writeCharacteristic(serviceUuid, uuid, characteristic.peripheralId)}
+                        disabled={busyKey === key}
+                        style={[styles.writeButton, { backgroundColor: colors.primary, opacity: busyKey === key ? 0.5 : 1 }]}
+                      >
+                        <Text style={[styles.writeLabel, { color: colors.primaryForeground }]}>WRITE</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
           </View>
         ) : null}
 
@@ -206,7 +402,11 @@ function formatEvent(event: AnalysisEvent): string {
   if (event.type === 'characteristic') {
     return `[characteristic] ${event.serviceUuid || '—'} / ${event.uuid} · ${event.properties || '—'}`;
   }
-  if (event.type === 'value') return `[read] ${event.uuid} · ${event.hex || '(empty)'} (${event.length ?? 0} bytes)`;
+  if (event.type === 'value') return `[${event.source || 'read'}] ${event.uuid} · ${event.hex || '(empty)'} (${event.length ?? 0} bytes)`;
+  if (event.type === 'operation') return `[${event.operation || 'operation'}] ${event.uuid || ''} · ${event.message || ''}`;
+  if (event.type === 'writeAck') return `[write ack] ${event.uuid || ''} · ${event.message || ''}`;
+  if (event.type === 'writeError') return `[write error] ${event.uuid || ''} · ${event.message || ''}`;
+  if (event.type === 'notifyState') return `[notify] ${event.uuid || ''} · ${event.enabled ? 'on' : 'off'}`;
   const timestamp = event.capturedAt ? ` ${formatTimestamp(event.capturedAt)}` : '';
   return `[${event.type}]${timestamp} ${event.message || event.name || ''}`;
 }
@@ -246,6 +446,18 @@ const styles = StyleSheet.create({
   summaryNote: { fontFamily: 'Inter_400Regular', fontSize: 10, lineHeight: 15 },
   section: { gap: 8, marginTop: 4 },
   sectionTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  helper: { fontFamily: 'Inter_400Regular', fontSize: 10, lineHeight: 15 },
+  characteristicCard: { borderRadius: 15, borderWidth: 1, padding: 11, gap: 7 },
+  characteristicTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
+  characteristicMeta: { fontFamily: 'Inter_400Regular', fontSize: 9, lineHeight: 14 },
+  valueText: { fontFamily: 'Inter_500Medium', fontSize: 10, lineHeight: 15 },
+  operationRow: { flexDirection: 'row', gap: 7 },
+  operationButton: { minHeight: 31, borderRadius: 9, borderWidth: 1, paddingHorizontal: 10, justifyContent: 'center', alignItems: 'center' },
+  operationLabel: { fontFamily: 'Inter_700Bold', fontSize: 9, letterSpacing: 0.5 },
+  writeRow: { flexDirection: 'row', gap: 7, alignItems: 'center' },
+  payloadInput: { flex: 1, minHeight: 38, borderRadius: 9, borderWidth: 1, paddingHorizontal: 10, fontFamily: 'Inter_500Medium', fontSize: 11 },
+  writeButton: { minHeight: 38, borderRadius: 9, paddingHorizontal: 12, justifyContent: 'center', alignItems: 'center' },
+  writeLabel: { fontFamily: 'Inter_700Bold', fontSize: 9, letterSpacing: 0.5 },
   logHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   count: { fontFamily: 'Inter_400Regular', fontSize: 10 },
   peripheral: { minHeight: 63, borderRadius: 16, borderWidth: 1, padding: 11, flexDirection: 'row', alignItems: 'center', gap: 10 },

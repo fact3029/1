@@ -90,7 +90,7 @@ export default function InfoScreen() {
       <View style={[styles.noticeCard, { backgroundColor: colors.accent }]}>
         <Feather name="info" size={16} color={colors.primary} />
         <Text style={[styles.noticeText, { color: colors.mutedForeground }]}>
-          ヘッドホン本体のEQを実装するには、SkullcandyがCrusher EVO向けの制御仕様またはSDKを公開している必要があります。現在のBluetooth解析は読み取り専用で、書き込みは行いません。
+          ヘッドホン本体のEQを実装するには、Characteristicとpayloadの対応を実機で確認する必要があります。Bluetooth Labでは構成の読み取り、notify購読、確認付きの試験書き込みまで実行できます。
         </Text>
       </View>
 

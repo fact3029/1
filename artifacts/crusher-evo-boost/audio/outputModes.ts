@@ -60,9 +60,9 @@ export const OUTPUT_MODES: OutputMode[] = [
   {
     id: 'analysis',
     title: '解析モード',
-    description: 'Bluetoothサービスと値を診断ログに記録',
+    description: 'Bluetooth構成を確認し、GATT操作を試験',
     status: '調査用',
-    detail: 'Crusher EVOのBLEサービスを読み取り専用で確認します。EQ書き込みは行いません。',
+    detail: 'Crusher EVOのBLEサービス、Characteristic、read/notifyを確認し、payloadを明示して試験書き込みできます。EQ用と未確認のpayloadは自動送信しません。',
     available: true,
   },
 ];

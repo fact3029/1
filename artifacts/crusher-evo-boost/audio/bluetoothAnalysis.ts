@@ -13,6 +13,9 @@ export type AnalysisEvent = {
   hex?: string;
   length?: number;
   message?: string;
+  source?: 'read' | 'notify';
+  operation?: 'read' | 'write' | 'writeWithoutResponse';
+  enabled?: boolean;
   capturedAt?: number;
 };
 
@@ -22,6 +25,24 @@ type CrusherAnalysisModule = {
   startBluetoothAnalysis: () => Promise<void>;
   stopBluetoothAnalysis: () => Promise<void>;
   connectAnalysisPeripheral: (identifier: string) => Promise<void>;
+  readAnalysisCharacteristic: (
+    identifier: string,
+    serviceUuid: string,
+    characteristicUuid: string,
+  ) => Promise<void>;
+  setAnalysisNotify: (
+    identifier: string,
+    serviceUuid: string,
+    characteristicUuid: string,
+    enabled: boolean,
+  ) => Promise<void>;
+  writeAnalysisCharacteristic: (
+    identifier: string,
+    serviceUuid: string,
+    characteristicUuid: string,
+    hex: string,
+    withoutResponse: boolean,
+  ) => Promise<void>;
   addListener: (
     eventName: 'analysisEvent',
     listener: (event: AnalysisEvent) => void,
@@ -100,5 +121,47 @@ export async function connectAnalysisPeripheral(identifier: string): Promise<boo
   const nativeModule = getNativeModule();
   if (!nativeModule) return false;
   await nativeModule.connectAnalysisPeripheral(identifier);
+  return true;
+}
+
+export async function readAnalysisCharacteristic(
+  identifier: string,
+  serviceUuid: string,
+  characteristicUuid: string,
+): Promise<boolean> {
+  const nativeModule = getNativeModule();
+  if (!nativeModule) return false;
+  await nativeModule.readAnalysisCharacteristic(identifier, serviceUuid, characteristicUuid);
+  return true;
+}
+
+export async function setAnalysisNotify(
+  identifier: string,
+  serviceUuid: string,
+  characteristicUuid: string,
+  enabled: boolean,
+): Promise<boolean> {
+  const nativeModule = getNativeModule();
+  if (!nativeModule) return false;
+  await nativeModule.setAnalysisNotify(identifier, serviceUuid, characteristicUuid, enabled);
+  return true;
+}
+
+export async function writeAnalysisCharacteristic(
+  identifier: string,
+  serviceUuid: string,
+  characteristicUuid: string,
+  hex: string,
+  withoutResponse: boolean,
+): Promise<boolean> {
+  const nativeModule = getNativeModule();
+  if (!nativeModule) return false;
+  await nativeModule.writeAnalysisCharacteristic(
+    identifier,
+    serviceUuid,
+    characteristicUuid,
+    hex,
+    withoutResponse,
+  );
   return true;
 }
