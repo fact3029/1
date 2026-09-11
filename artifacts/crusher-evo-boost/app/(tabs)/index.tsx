@@ -5,7 +5,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BoostSlider } from '@/components/BoostSlider';
-import { BassTestCard } from '@/components/BassTestCard';
 import { OutputModeSelector } from '@/components/OutputModeSelector';
 import { activateAudioSession, openBluetoothSettings, subscribeToOutputRoute, type OutputRoute } from '@/audio/outputRoute';
 import { useProfiles } from '@/context/ProfileContext';
@@ -17,7 +16,7 @@ export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { activeProfile, profiles, hydrated, outputMode, setOutputMode, setActiveId, updateActive, saveProfiles } = useProfiles();
+  const { activeProfile, hydrated, setOutputMode, updateActive, saveProfiles } = useProfiles();
   const [saved, setSaved] = useState(false);
   const [outputRoute, setOutputRoute] = useState<OutputRoute>({
     connected: false,
@@ -114,17 +113,11 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      <BassTestCard
-        bassBoost={activeProfile.bassBoost}
-        subBass={activeProfile.subBass}
-        bands={activeProfile.bands}
-      />
-
       <OutputModeSelector
-        selectedMode={outputMode}
         onChange={setOutputMode}
         route={outputRoute}
         onOpenAnalysis={() => router.push('/analyze')}
+        onOpenPlayer={() => router.push('/player')}
       />
 
       <View style={styles.sectionHeading}>
@@ -146,14 +139,16 @@ export default function HomeScreen() {
       <View style={[styles.controlCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <BoostSlider
           label="低音ブースト"
-          helper="音圧を上げすぎず、深さを足す"
+          helper="Playerで再生する音源にだけ適用"
           value={activeProfile.bassBoost}
+          enabled={activeProfile.bassEnabled !== false}
+          onToggle={() => updateActive({ bassEnabled: activeProfile.bassEnabled === false })}
           onChange={(value) => updateActive({ bassBoost: value })}
         />
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
         <BoostSlider
           label="Sub-bass"
-          helper="Crusherの響きを強くしたいとき"
+          helper="低域の深さを追加（Playerのみ）"
           value={Math.round(((activeProfile.subBass + 6) / 12) * 100)}
           onChange={(value) => updateActive({ subBass: Math.round((value / 100) * 12 - 6) })}
         />

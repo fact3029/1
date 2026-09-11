@@ -21,6 +21,12 @@ function NativeTabLayout() {
         />
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="player">
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'play.circle', selected: 'play.circle.fill' }}
+        />
+        <NativeTabs.Trigger.Label>Player</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="presets">
         <NativeTabs.Trigger.Icon
           sf={{ default: 'slider.horizontal.3', selected: 'slider.horizontal.3' }}
@@ -84,6 +90,18 @@ function ClassicTabLayout() {
               <SymbolView name="house" tintColor={color} size={24} />
             ) : (
               <Feather name="home" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="player"
+        options={{
+          title: 'Player',
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="play.circle" tintColor={color} size={24} />
+            ) : (
+              <Feather name="play-circle" size={22} color={color} />
             ),
         }}
       />

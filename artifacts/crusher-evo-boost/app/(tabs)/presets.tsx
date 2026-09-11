@@ -62,7 +62,7 @@ export default function PresetsScreen() {
                   ) : null}
                 </View>
                 <Text style={[styles.profileMeta, { color: colors.mutedForeground }]}>
-                  Bass {profile.bassBoost}%  ·  Sub-bass {profile.subBass > 0 ? '+' : ''}{profile.subBass} dB
+                  Bass {profile.bassEnabled !== false ? `${profile.bassBoost}%` : 'OFF'}  ·  Sub-bass {profile.subBass > 0 ? '+' : ''}{profile.subBass} dB
                 </Text>
               </View>
               <View style={styles.actions}>

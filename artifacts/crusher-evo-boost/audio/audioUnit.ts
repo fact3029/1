@@ -27,7 +27,7 @@ export async function syncProfileToAudioUnit(profile: EqProfile): Promise<AudioU
   if (!nativeAudioUnit) return { available: false };
 
   try {
-    await nativeAudioUnit.syncProfile(profile.bassBoost, profile.subBass, profile.bands);
+    await nativeAudioUnit.syncProfile(profile.bassEnabled === false ? 0 : profile.bassBoost, profile.subBass, profile.bands);
     return { available: true };
   } catch (error) {
     return {

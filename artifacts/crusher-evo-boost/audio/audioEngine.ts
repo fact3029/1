@@ -3,6 +3,7 @@ import { activateAudioSession } from '@/audio/outputRoute';
 
 export type BassTestSettings = {
   bassBoost: number;
+  bassEnabled?: boolean;
   subBass: number;
   bands: number[];
 };
@@ -71,7 +72,8 @@ function createEqChain(context: AudioContext, masterGain: number) {
   safety.oversample = '4x';
 
   const update = (settings: BassTestSettings) => {
-    lowShelf.gain.value = clamp(2 + settings.bassBoost * 0.12 + settings.subBass * 0.55, -2, 12);
+    const bassBoost = settings.bassEnabled === false ? 0 : settings.bassBoost;
+    lowShelf.gain.value = clamp(bassBoost * 0.12 + settings.subBass * 0.55, -2, 12);
     bandFilters.forEach((filter, index) => {
       filter.type = 'peaking';
       filter.frequency.value = EQ_FREQUENCIES[index];
@@ -115,7 +117,8 @@ function createRawEqChain(context: AudioContext, masterGain: number) {
   safety.oversample = '4x';
 
   const update = (settings: BassTestSettings) => {
-    lowShelf.gain.value = clamp(2 + settings.bassBoost * 0.12 + settings.subBass * 0.55, -2, 12);
+    const bassBoost = settings.bassEnabled === false ? 0 : settings.bassBoost;
+    lowShelf.gain.value = clamp(bassBoost * 0.12 + settings.subBass * 0.55, -2, 12);
     bandFilters.forEach((filter, index) => {
       filter.type = 'peaking';
       filter.frequency.value = EQ_FREQUENCIES[index];

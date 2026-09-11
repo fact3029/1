@@ -8,6 +8,7 @@ export type EqProfile = {
   id: string;
   name: string;
   bassBoost: number;
+  bassEnabled: boolean;
   subBass: number;
   bands: number[];
   isDefault?: boolean;
@@ -23,6 +24,7 @@ export const DEFAULT_PROFILES: EqProfile[] = [
     id: 'crusher-drive',
     name: 'Crusher Drive',
     ...DEFAULT_PROFILE_VALUES['crusher-drive'],
+    bassEnabled: true,
     isDefault: true,
     updatedAt: 0,
   },
@@ -30,6 +32,7 @@ export const DEFAULT_PROFILES: EqProfile[] = [
     id: 'night-bass',
     name: 'Night Bass',
     ...DEFAULT_PROFILE_VALUES['night-bass'],
+    bassEnabled: true,
     isDefault: true,
     updatedAt: 0,
   },
@@ -37,6 +40,7 @@ export const DEFAULT_PROFILES: EqProfile[] = [
     id: 'balanced',
     name: 'Balanced',
     ...DEFAULT_PROFILE_VALUES.balanced,
+    bassEnabled: true,
     isDefault: true,
     updatedAt: 0,
   },
@@ -48,7 +52,7 @@ type ProfileContextValue = {
   activeId: string;
   hydrated: boolean;
   setActiveId: (id: string) => void;
-  updateActive: (changes: Partial<Pick<EqProfile, 'bassBoost' | 'subBass' | 'bands'>>) => void;
+  updateActive: (changes: Partial<Pick<EqProfile, 'bassBoost' | 'bassEnabled' | 'subBass' | 'bands'>>) => void;
   saveProfiles: () => Promise<void>;
   createProfile: () => void;
   deleteProfile: (id: string) => void;
@@ -72,7 +76,10 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           AsyncStorage.getItem(ACTIVE_KEY),
           AsyncStorage.getItem(OUTPUT_MODE_KEY),
         ]);
-        if (storedProfiles) setProfiles(JSON.parse(storedProfiles) as EqProfile[]);
+        if (storedProfiles) {
+          const parsed = JSON.parse(storedProfiles) as EqProfile[];
+          setProfiles(parsed.map((profile) => ({ ...profile, bassEnabled: profile.bassEnabled !== false })));
+        }
         if (storedActive) setActiveId(storedActive);
         if (storedOutputMode) setOutputMode(storedOutputMode as OutputModeId);
       } catch {
@@ -103,7 +110,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     if (hydrated) void syncProfileToOutput(activeProfile, outputMode);
   }, [activeProfile, hydrated, outputMode]);
 
-  const updateActive = (changes: Partial<Pick<EqProfile, 'bassBoost' | 'subBass' | 'bands'>>) => {
+  const updateActive = (changes: Partial<Pick<EqProfile, 'bassBoost' | 'bassEnabled' | 'subBass' | 'bands'>>) => {
     setProfiles((current) =>
       current.map((profile) =>
         profile.id === activeId ? { ...profile, ...changes, updatedAt: Date.now() } : profile,
@@ -124,6 +131,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       id,
       name: `My preset ${profiles.filter((item) => !item.isDefault).length + 1}`,
       bassBoost: activeProfile.bassBoost,
+      bassEnabled: activeProfile.bassEnabled !== false,
       subBass: activeProfile.subBass,
       bands: [...activeProfile.bands],
       updatedAt: Date.now(),

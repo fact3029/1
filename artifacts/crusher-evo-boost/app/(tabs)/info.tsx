@@ -54,7 +54,7 @@ export default function InfoScreen() {
         <View style={styles.limitCopy}>
           <Text style={[styles.limitTitle, { color: colors.foreground }]}>出力方式を切り替え</Text>
           <Text style={[styles.limitBody, { color: colors.mutedForeground }]}>
-            Homeの「EQのかけ方」から、Audio Unit、接続中のヘッドフォン、一般Bluetooth、アプリ内テストを切り替えられます。Crusher EVO本体DSPへの送信は公式SDK/APIが提供された機種から有効化します。
+            HomeでEQの値を編集し、PlayerタブでFilesの音源を再生すると、その再生音にだけEQがかかります。Crusher EVO本体DSPへの送信はまだ行いません。
           </Text>
         </View>
       </View>

@@ -8,6 +8,7 @@ import { useColors } from '@/hooks/useColors';
 
 type BassTestCardProps = {
   bassBoost: number;
+  bassEnabled: boolean;
   subBass: number;
   bands: number[];
 };
@@ -16,7 +17,7 @@ type PlayerSource =
   | { kind: 'file'; uri: string; name: string }
   | { kind: 'builtIn'; id: string; name: string };
 
-export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
+export function BassTestCard({ bassBoost, bassEnabled, subBass, bands }: BassTestCardProps) {
   const colors = useColors();
   const [playing, setPlaying] = useState(false);
   const [source, setSource] = useState<PlayerSource | null>(null);
@@ -34,8 +35,8 @@ export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
   }, []);
 
   useEffect(() => {
-    sessionRef.current?.update({ bassBoost, subBass, bands });
-  }, [bassBoost, subBass, bands]);
+    sessionRef.current?.update({ bassBoost, bassEnabled, subBass, bands });
+  }, [bassBoost, bassEnabled, subBass, bands]);
 
   useEffect(() => {
     if (!playing) return;
@@ -88,8 +89,8 @@ export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
       sessionRef.current = null;
       const session =
         source.kind === 'file'
-          ? await startAudioFile(source.uri, { bassBoost, subBass, bands })
-          : await startBassTest({ bassBoost, subBass, bands }, source.id);
+          ? await startAudioFile(source.uri, { bassBoost, bassEnabled, subBass, bands })
+          : await startBassTest({ bassBoost, bassEnabled, subBass, bands }, source.id);
       sessionRef.current = session;
       const initialPosition = session.getPosition();
       setPosition(initialPosition.currentTime);
@@ -134,10 +135,10 @@ export function BassTestCard({ bassBoost, subBass, bands }: BassTestCardProps) {
           <View style={[styles.icon, { backgroundColor: colors.primary }]}>
             <Feather name="headphones" size={16} color={colors.primaryForeground} />
           </View>
-          <Text style={[styles.title, { color: colors.foreground }]}>音楽プレイヤー + EQ</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>アプリ内プレイヤー</Text>
         </View>
         <Text style={[styles.body, { color: colors.mutedForeground }]}>
-          Filesから曲を読み込み、このアプリの再生経路でEQしてBluetoothへ出力します。
+          Filesの曲や内蔵テスト音源を、このアプリ内でEQして再生します。Apple Music・YouTube・Crusher EVO本体DSPには適用されません。
         </Text>
         <Pressable
           testID="choose-audio-file"
