@@ -405,7 +405,7 @@ private final class BluetoothAnalyzer: NSObject, CBCentralManagerDelegate, CBPer
       "peripheralId": identifier,
       "serviceUuid": serviceUuid,
       "uuid": characteristicUuid,
-      "hex": hex(data),
+      "hex": self.hex(data),
       "length": data.count,
       "message": "payloadを送信しました。",
     ])
@@ -476,8 +476,7 @@ private final class BluetoothAnalyzer: NSObject, CBCentralManagerDelegate, CBPer
       service.uuid.uuidString.caseInsensitiveCompare(serviceUuid) == .orderedSame
     }
     let characteristics = matchingService?.characteristics
-      ?? peripheral.services?.flatMap { $0.characteristics }
-      ?? []
+      ?? (peripheral.services?.flatMap { $0.characteristics } ?? [])
     guard let characteristic = characteristics.first(where: { item in
       item.uuid.uuidString.caseInsensitiveCompare(characteristicUuid) == .orderedSame
     }) else {
@@ -520,6 +519,21 @@ private final class BluetoothAnalyzer: NSObject, CBCentralManagerDelegate, CBPer
 
   private func emit(type: String, serviceUuid: String, uuid: String, properties: String) {
     emit(type: type, ["serviceUuid": serviceUuid, "uuid": uuid, "properties": properties])
+  }
+
+  private func emit(
+    type: String,
+    peripheralId: String,
+    serviceUuid: String,
+    uuid: String,
+    properties: String
+  ) {
+    emit(type: type, [
+      "peripheralId": peripheralId,
+      "serviceUuid": serviceUuid,
+      "uuid": uuid,
+      "properties": properties,
+    ])
   }
 
   private func emit(type: String, uuid: String, hex: String, length: Int) {
