@@ -43,10 +43,10 @@ export default function PlayerScreen() {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.header}>
-        <Text style={[styles.eyebrow, { color: colors.primary }]}>PLAYER · EQ ACTIVE</Text>
+        <Text style={[styles.eyebrow, { color: colors.primary }]}>PLAYER · TEST BENCH</Text>
         <Text style={[styles.title, { color: colors.foreground }]}>音楽を再生</Text>
         <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-          このタブで再生した音源だけに、現在のEQ設定がかかります。
+          本体DSPの検証前に、アプリ内EQの値と音声処理を確認するためのテストプレイヤーです。
         </Text>
       </View>
 
@@ -109,7 +109,7 @@ export default function PlayerScreen() {
           ))}
         </View>
         <Text style={[styles.note, { color: colors.mutedForeground }]}>
-          Homeで変更した値は、再生中の音源にも反映されます。Playerを停止すると、アプリの音声処理も停止します。
+          Homeで変更した値はこのテスト再生に反映されます。最終目標はPlayerを経由せず、Crusher EVO本体DSPで外部アプリの音声にも適用することです。
         </Text>
       </View>
     </ScrollView>

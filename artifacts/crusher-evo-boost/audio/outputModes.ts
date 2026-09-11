@@ -37,8 +37,8 @@ export const OUTPUT_MODES: OutputMode[] = [
     id: 'headphone-dsp',
     title: 'ヘッドフォン本体DSP',
     description: 'Crusher EVO本体のEQを変更',
-    status: '未対応',
-    detail: 'Crusher EVO S6EVWの本体DSPを書き換える公開SDK/APIは確認できていません。現在は本体へのEQ書き込みを行いません。',
+    status: 'プロトコル検証中',
+    detail: '正しいBLE Characteristicとpayloadを特定できれば、iPhoneからCrusher EVO本体へEQを書き込めます。未確認payloadは自動送信しません。',
     available: false,
   },
   {
@@ -51,10 +51,10 @@ export const OUTPUT_MODES: OutputMode[] = [
   },
   {
     id: 'app-test',
-    title: 'アプリ内プレイヤー + EQ',
-    description: 'Filesの音源をEQして再生',
-    status: '利用可能',
-    detail: 'Filesから選んだMP3・M4A・WAVなどを、このアプリの音声グラフでEQして再生します。Bluetooth接続時はCrusher EVOへ出力します。',
+    title: 'アプリ内プレイヤー（検証用）',
+    description: '本体DSPが未確認の間の音声テスト',
+    status: '検証用',
+    detail: 'Filesから選んだ音源をアプリ内でEQし、音声処理の値を確認します。本番目標はCrusher EVO本体DSPでの処理です。',
     available: true,
   },
   {

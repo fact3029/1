@@ -97,7 +97,7 @@ export default function HomeScreen() {
           </View>
           <Text style={[styles.cardBody, { color: colors.mutedForeground }]}>
             {outputRoute.isBluetooth
-              ? 'アプリ内プレイヤーの音声は、このBluetooth出力へ送られます。'
+              ? '本体DSPの検証が完了すれば、Apple Music・YouTubeを含む音声全体をEQできます。'
               : outputRoute.connected
                 ? 'iPhoneのBluetooth設定でCrusher EVOを接続すると、ここに表示されます。'
                 : 'iPhoneのBluetooth設定でCrusher EVOを接続してください.'}
@@ -220,7 +220,7 @@ export default function HomeScreen() {
       <View style={styles.note}>
         <Feather name="info" size={14} color={colors.mutedForeground} />
         <Text style={[styles.noteText, { color: colors.mutedForeground }]}>
-          このEQはFilesから選んだ音源をアプリ内で再生するときに適用されます。Crusher EVO本体のDSP設定やApple Music・YouTubeの音声は変更しません。
+          現在のPlayerは検証用です。本命はCrusher EVO本体DSPを制御し、Apple Music・YouTubeを含むBluetooth音声全体へEQを適用することです。
         </Text>
       </View>
     </ScrollView>

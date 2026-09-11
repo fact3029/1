@@ -31,7 +31,7 @@ export async function syncProfileToOutput(
       mode,
       available: false,
       applied: false,
-      message: 'Crusher EVO本体DSPの公式SDK/APIが必要です。',
+      message: 'Crusher EVO本体DSPのBLEプロトコルを検証中です。Characteristicとpayloadが確定するまで自動書き込みは行いません。',
     };
   }
 

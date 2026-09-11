@@ -54,7 +54,7 @@ export default function InfoScreen() {
         <View style={styles.limitCopy}>
           <Text style={[styles.limitTitle, { color: colors.foreground }]}>出力方式を切り替え</Text>
           <Text style={[styles.limitBody, { color: colors.mutedForeground }]}>
-            HomeでEQの値を編集し、PlayerタブでFilesの音源を再生すると、その再生音にだけEQがかかります。Crusher EVO本体DSPへの送信はまだ行いません。
+            本命はCrusher EVO本体DSPの制御です。正しいBLEコマンドが確定すれば、Apple Music・YouTubeを含む外部アプリの音声にも本体側でEQを適用できます。Playerは検証用として残します。
           </Text>
         </View>
       </View>
@@ -65,10 +65,10 @@ export default function InfoScreen() {
           <Text style={[styles.scopeTitle, { color: colors.foreground }]}>現在の対応範囲</Text>
         </View>
         {([
-          ['利用可能', 'アプリ内プレイヤー', 'FilesのMP3・M4A・WAVを再生し、Bass/Sub-bass/5バンドEQを適用', 'check-circle', true],
+          ['検証用', 'アプリ内プレイヤー', 'FilesのMP3・M4A・WAVを再生し、EQ値と音声処理を確認', 'activity', true],
           ['利用可能', 'Bluetooth出力検出', 'Crusher EVOの接続名と音声出力ルートを表示', 'bluetooth', true],
-          ['制限あり', 'Crusher EVO本体DSP', '標準Bluetooth経由で本体のEQ値を書き込む公開APIがないため未対応', 'slash', false],
-          ['対象外', 'Apple Music・YouTube', '他アプリの音声ストリームを取得して、このアプリのEQへ通すことは不可', 'x-circle', false],
+          ['調査中', 'Crusher EVO本体DSP', 'BLE CharacteristicとEQ payloadを特定して本体側EQを実現する', 'target', false],
+          ['本体DSP経由で対応予定', 'Apple Music・YouTube', '本体DSPが制御できれば、他アプリの音声をアプリ内へ取り込まずに適用', 'music', false],
         ] as const).map(([status, title, body, icon, supported]) => (
           <View key={title} style={[styles.scopeRow, { borderColor: colors.border }]}>
             <Feather

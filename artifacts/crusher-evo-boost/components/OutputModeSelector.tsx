@@ -16,7 +16,8 @@ type OutputModeSelectorProps = {
 
 export function OutputModeSelector({ onChange, route, onOpenAnalysis, onOpenPlayer }: OutputModeSelectorProps) {
   const colors = useColors();
-  const appliedMode = getOutputMode('app-test');
+  const targetMode = getOutputMode('headphone-dsp');
+  const testMode = getOutputMode('app-test');
 
   return (
     <View style={styles.wrapper}>
@@ -39,47 +40,50 @@ export function OutputModeSelector({ onChange, route, onOpenAnalysis, onOpenPlay
         <View style={[styles.routeDot, { backgroundColor: route.connected ? colors.primary : colors.border }]} />
       </View>
 
-      <View style={[styles.appliedCard, { backgroundColor: colors.secondary, borderColor: colors.primary }]}>
-        <View style={[styles.appliedIcon, { backgroundColor: colors.primary }]}>
-          <Feather name="check" size={16} color={colors.primaryForeground} />
+      <View style={[styles.targetCard, { backgroundColor: colors.accent, borderColor: colors.primary }]}>
+        <View style={[styles.targetIcon, { backgroundColor: colors.primary }]}>
+          <Feather name="target" size={16} color={colors.primaryForeground} />
         </View>
         <View style={styles.modeCopy}>
           <View style={styles.modeTitleRow}>
-            <Text style={[styles.modeTitle, { color: colors.foreground }]}>{appliedMode.title}</Text>
-            <Text style={[styles.modeStatus, { color: colors.primary }]}>実際に適用</Text>
+            <Text style={[styles.modeTitle, { color: colors.foreground }]}>{targetMode.title}</Text>
+            <Text style={[styles.modeStatus, { color: colors.primary }]}>本命</Text>
           </View>
           <Text style={[styles.modeDescription, { color: colors.mutedForeground }]}>
-            Filesの曲・内蔵テスト音源を、このアプリの再生中だけEQします。
+            成功すればApple Music・YouTubeを含むBluetooth音声全体にEQが適用されます。
           </Text>
         </View>
       </View>
 
       <View style={[styles.notAppliedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Feather name="slash" size={15} color={colors.mutedForeground} />
+        <Feather name="shield" size={15} color={colors.mutedForeground} />
         <Text style={[styles.notAppliedText, { color: colors.mutedForeground }]}>
-          Apple Music・YouTube・Crusher EVO本体DSPには適用しません。
+          現在は正しいBLEコマンドが未確定です。確認前のpayloadは本体へ送信しません。
         </Text>
+      </View>
+
+      <View style={[styles.appliedCard, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+        <View style={[styles.appliedIcon, { backgroundColor: colors.border }]}>
+          <Feather name="activity" size={16} color={colors.foreground} />
+        </View>
+        <View style={styles.modeCopy}>
+          <View style={styles.modeTitleRow}>
+            <Text style={[styles.modeTitle, { color: colors.foreground }]}>{testMode.title}</Text>
+            <Text style={[styles.modeStatus, { color: colors.mutedForeground }]}>今すぐ使用可</Text>
+          </View>
+          <Text style={[styles.modeDescription, { color: colors.mutedForeground }]}>
+            本体DSPの確認前に、PlayerでEQ値と音声処理を検証します。
+          </Text>
+        </View>
       </View>
 
       <View style={[styles.detail, { backgroundColor: colors.accent }]}>
         <Feather name="info" size={14} color={colors.primary} />
         <Text style={[styles.detailText, { color: colors.mutedForeground }]}>
-          「低音ブースト」と5バンドEQは、Playerタブで再生する音源に反映されます。
+          DSP Labで公式アプリの変更前後とBLEログを比較し、EQ用Characteristicとpayloadを特定します。
         </Text>
       </View>
       <View style={styles.actionRow}>
-        <Pressable
-          testID="open-player"
-          accessibilityRole="button"
-          onPress={() => {
-            onChange('app-test');
-            onOpenPlayer();
-          }}
-          style={({ pressed }) => [styles.actionButton, { backgroundColor: colors.primary, opacity: pressed ? 0.75 : 1 }]}
-        >
-          <Feather name="play" size={14} color={colors.primaryForeground} />
-          <Text style={[styles.actionLabel, { color: colors.primaryForeground }]}>Playerを開く</Text>
-        </Pressable>
         <Pressable
           testID="open-analysis"
           accessibilityRole="button"
@@ -87,10 +91,22 @@ export function OutputModeSelector({ onChange, route, onOpenAnalysis, onOpenPlay
             onChange('analysis');
             onOpenAnalysis();
           }}
+          style={({ pressed }) => [styles.actionButton, { backgroundColor: colors.primary, opacity: pressed ? 0.75 : 1 }]}
+        >
+          <Feather name="bluetooth" size={14} color={colors.primaryForeground} />
+          <Text style={[styles.actionLabel, { color: colors.primaryForeground }]}>DSP Labを開く</Text>
+        </Pressable>
+        <Pressable
+          testID="open-player"
+          accessibilityRole="button"
+          onPress={() => {
+            onChange('app-test');
+            onOpenPlayer();
+          }}
           style={({ pressed }) => [styles.secondaryAction, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
         >
-          <Feather name="bluetooth" size={14} color={colors.foreground} />
-          <Text style={[styles.secondaryActionLabel, { color: colors.foreground }]}>BLE Lab</Text>
+          <Feather name="play" size={14} color={colors.foreground} />
+          <Text style={[styles.secondaryActionLabel, { color: colors.foreground }]}>検証Player</Text>
         </Pressable>
       </View>
     </View>
@@ -108,6 +124,8 @@ const styles = StyleSheet.create({
   routeLabel: { fontFamily: 'Inter_400Regular', fontSize: 10 },
   routeName: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   routeDot: { width: 8, height: 8, borderRadius: 4 },
+  targetCard: { minHeight: 78, borderRadius: 17, borderWidth: 1, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  targetIcon: { width: 32, height: 32, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   appliedCard: { minHeight: 78, borderRadius: 17, borderWidth: 1, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10 },
   appliedIcon: { width: 32, height: 32, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   notAppliedCard: { minHeight: 48, borderRadius: 15, borderWidth: 1, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
