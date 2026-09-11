@@ -475,8 +475,12 @@ private final class BluetoothAnalyzer: NSObject, CBCentralManagerDelegate, CBPer
     let matchingService = peripheral.services?.first { service in
       service.uuid.uuidString.caseInsensitiveCompare(serviceUuid) == .orderedSame
     }
-    let characteristics = matchingService?.characteristics
-      ?? (peripheral.services?.flatMap { $0.characteristics } ?? [])
+    let characteristics: [CBCharacteristic]
+    if let serviceCharacteristics = matchingService?.characteristics {
+      characteristics = serviceCharacteristics
+    } else {
+      characteristics = (peripheral.services ?? []).flatMap { $0.characteristics ?? [] }
+    }
     guard let characteristic = characteristics.first(where: { item in
       item.uuid.uuidString.caseInsensitiveCompare(characteristicUuid) == .orderedSame
     }) else {
